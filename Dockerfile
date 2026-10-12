@@ -20,5 +20,4 @@ USER appuser
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-# Apply database migrations, then start the API.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn queueforge.api.app:create_app --factory --host 0.0.0.0 --port 8000"]
+CMD ["uvicorn", "queueforge.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

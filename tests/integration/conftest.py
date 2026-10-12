@@ -46,7 +46,11 @@ def engine() -> Iterator[Engine]:
 @pytest.fixture(autouse=True)
 def clean_tables(engine: Engine) -> None:
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE idempotency_keys, jobs, api_clients CASCADE"))
+        conn.execute(
+            text(
+                "TRUNCATE notifications, job_attempts, idempotency_keys, jobs, api_clients CASCADE"
+            )
+        )
 
 
 @pytest.fixture

@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     database_url: str = Field(min_length=1)
     log_level: str = "INFO"
 
+    # Worker tuning (not secrets).
+    worker_poll_interval_seconds: float = 1.0
+    # Milestone 3 uses a fixed lease. Heartbeats and expiry recovery arrive in Milestone 4.
+    worker_lease_seconds: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:
