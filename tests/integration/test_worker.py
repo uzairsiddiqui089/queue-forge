@@ -132,18 +132,20 @@ def test_sleep_task(sessions: sessionmaker[Session], make_client: MakeClient) ->
     assert job.status == "succeeded" and job.result == {"slept_seconds": 0.05}
 
 
-def test_flaky_task_fails_then_would_succeed_later(
+def test_flaky_task_is_retried_not_failed(
     sessions: sessionmaker[Session], make_client: MakeClient
 ) -> None:
-    # No retries until Milestone 4, so a failing attempt is final for now.
     client_id, _ = make_client("alice")
     failing = submit(sessions, client_id, "flaky", {"fail_times": 1})
     Worker(sessions, "w1").run_once()
     job = load_job(sessions, failing)
-    assert job.status == "failed"
-    assert job.last_error == {"type": "TaskError", "message": "deliberate failure on attempt 1"}
+    assert job.status == "queued"  # waiting for its retry, not failed
+    assert job.last_error == {
+        "type": "RetryableError",
+        "message": "deliberate failure on attempt 1",
+    }
     [attempt] = attempts_of(sessions, failing)
-    assert attempt.outcome == "permanent_error" and attempt.error_type == "TaskError"
+    assert attempt.outcome == "retryable_error" and attempt.error_type == "RetryableError"
 
     succeeding = submit(sessions, client_id, "flaky", {"fail_times": 0})
     Worker(sessions, "w1").run_once()
@@ -183,7 +185,7 @@ def test_unexpected_error_is_stored_without_leaking_its_message(
     Worker(sessions, "w1").run_once()
 
     job = load_job(sessions, job_id)
-    assert job.status == "failed"
+    assert job.status == "queued"  # unknown errors are treated as temporary (retried, bounded)
     assert job.last_error is not None and job.last_error["type"] == "UnexpectedError"
     assert "SECRET-PW" not in str(job.last_error)
     [attempt] = attempts_of(sessions, job_id)

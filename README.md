@@ -5,10 +5,11 @@ Clients submit jobs over HTTP; separate worker processes claim and execute them
 with at-least-once semantics. It is a learning and portfolio project that
 focuses on correct, explainable backend engineering.
 
-> **Status: Milestone 3 (workers).** You can submit jobs, and separate worker
-> processes claim and run them. Failed jobs are **not** retried yet, and a job
-> whose worker crashes is **not** recovered yet (both planned for Milestone 4).
-> See [docs/project-brief.md](docs/project-brief.md) for the plan and
+> **Status: Milestone 4 (failure handling).** You can submit jobs, and separate
+> worker processes claim and run them. Failed jobs are retried with backoff,
+> jobs from crashed workers are recovered, and jobs that keep failing are
+> dead-lettered. The system is **at-least-once**: a job can run more than once
+> (see [architecture](docs/architecture.md)), so handlers must be idempotent. See [docs/project-brief.md](docs/project-brief.md) for the plan and
 > [docs/architecture.md](docs/architecture.md) for how it works.
 
 ## Implemented
@@ -16,6 +17,8 @@ focuses on correct, explainable backend engineering.
 - Separate worker processes (`python -m queueforge.worker`) that claim jobs safely with `FOR UPDATE SKIP LOCKED`, so no two workers take the same job
 - Four task handlers (`echo`, `sleep`, `flaky`, `simulated_notification`), results and sanitized errors saved, every attempt recorded in `job_attempts`
 - Fenced result writes: a worker that lost its lease cannot overwrite a job
+- Retries: permanent vs temporary errors, exponential backoff with full jitter, 5 attempts, then `dead_lettered`
+- Crash recovery: leases with a heartbeat, plus a sweeper that re-queues jobs from dead workers (tested with a real hard-killed worker process)
 - `POST /v1/jobs` and `GET /v1/jobs/{id}`, with API-key authentication
 - Allow-listed task types with validated payloads: `echo`, `sleep`, `flaky`, `simulated_notification`
 - Jobs stored in PostgreSQL (Alembic migrations run automatically in the API container)
@@ -105,8 +108,10 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 
 ## Limitations
 
-- A job that fails is marked `failed` right away: no retries yet (Milestone 4). A job claimed by a worker that then crashes stays `running` forever until recovery exists (Milestone 4).
-- The 30 s lease is recorded but not yet enforced or renewed (no heartbeat or sweeper yet).
+- At-least-once, **not** exactly-once: after a crash or a slow worker, a job can run twice. Only the stored result is protected (by the lease-token fence); side effects must be made safe by the handler.
+- Recovery needs at least one worker running (the sweeper runs inside each worker).
+- Dead-lettered jobs can be read through the API but there is no admin endpoint to inspect or re-queue them yet (Milestone 5).
+- Retry settings are global (env vars), not per task type.
 - No request body size limit or rate limiting yet (planned for Milestone 5).
 - No endpoint to create API clients; use the script above.
 - The Compose file is for local development only (ports bound to localhost, no TLS).
