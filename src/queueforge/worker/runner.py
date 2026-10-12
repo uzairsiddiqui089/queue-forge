@@ -1,22 +1,46 @@
-"""The worker loop: claim a job, run its handler, record the result."""
+"""The worker loop: claim a job, run its handler, record the result.
+
+A worker does three things:
+1. Poll loop: claim and run jobs.
+2. Heartbeat: while a handler runs, keep renewing the job's lease.
+3. Sweeper: now and then, recover jobs whose lease expired (their worker died).
+"""
 
 import json
 import logging
 import threading
+import time
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from queueforge.domain.retry import RetryPolicy
 from queueforge.domain.states import JobStatus
-from queueforge.tasks.handlers import HANDLERS, HandlerContext, TaskError
+from queueforge.tasks.handlers import HANDLERS, HandlerContext, RetryableError, TaskError
 from queueforge.tasks.schemas import PAYLOAD_MODELS
-from queueforge.worker.claims import ClaimedJob, claim_next_job, finish_job
+from queueforge.worker.claims import (
+    ClaimedJob,
+    claim_next_job,
+    extend_lease,
+    fail_retryable,
+    finish_job,
+    sweep_expired_leases,
+)
 
 log = logging.getLogger("queueforge.worker")
 
 MAX_RESULT_BYTES = 10_000
 GENERIC_ERROR = "The task failed with an unexpected error"
+
+
+@dataclass(frozen=True)
+class Outcome:
+    kind: str  # "success", "permanent" or "retryable"
+    result: dict[str, Any] | None = None
+    error_type: str | None = None
+    error_message: str | None = None
 
 
 class Worker:
@@ -27,11 +51,20 @@ class Worker:
         *,
         lease_seconds: int = 30,
         poll_interval: float = 1.0,
+        heartbeat_interval: float = 10.0,
+        sweep_interval: float = 10.0,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._sessions = session_factory
         self.worker_id = worker_id
         self._lease_seconds = lease_seconds
         self._poll_interval = poll_interval
+        self._heartbeat_interval = heartbeat_interval
+        self._sweep_interval = sweep_interval
+        self._retry = retry_policy or RetryPolicy()
+        self._last_sweep = float("-inf")
+
+    # --- one job ---------------------------------------------------------------
 
     def run_once(self) -> bool:
         """Process at most one job. Returns True if a job was claimed."""
@@ -42,33 +75,44 @@ class Worker:
 
         # Log identifiers only. Never the payload.
         log.info(
-            "claimed job_id=%s task_type=%s attempt=%d worker_id=%s",
+            "claimed job_id=%s task_type=%s attempt=%d/%d worker_id=%s",
             claimed.id,
             claimed.task_type,
             claimed.attempt_number,
+            claimed.max_attempts,
             self.worker_id,
         )
         # The handler runs here, with no database transaction open.
-        status, result, error_type, error_message = self._execute(claimed)
-
-        with self._sessions() as session:
-            recorded = finish_job(
-                session,
-                claimed,
-                status=status,
-                result=result,
-                error_type=error_type,
-                error_message=error_message,
-            )
-        if recorded:
-            log.info("finished job_id=%s status=%s", claimed.id, status.value)
-        else:
-            log.warning("lease lost, result discarded job_id=%s", claimed.id)
+        outcome = self._execute_with_heartbeat(claimed)
+        self._record(claimed, outcome)
         return True
 
-    def _execute(
-        self, claimed: ClaimedJob
-    ) -> tuple[JobStatus, dict[str, Any] | None, str | None, str | None]:
+    def _execute_with_heartbeat(self, claimed: ClaimedJob) -> Outcome:
+        stop = threading.Event()
+        beat = threading.Thread(target=self._heartbeat, args=(claimed, stop), daemon=True)
+        beat.start()
+        try:
+            return self._execute(claimed)
+        finally:
+            stop.set()
+            beat.join()
+
+    def _heartbeat(self, claimed: ClaimedJob, stop: threading.Event) -> None:
+        while not stop.wait(self._heartbeat_interval):
+            try:
+                with self._sessions() as session:
+                    still_ours = extend_lease(
+                        session, claimed.id, claimed.lease_token, self._lease_seconds
+                    )
+            except SQLAlchemyError:
+                log.exception("heartbeat failed job_id=%s; will try again", claimed.id)
+                continue
+            if not still_ours:
+                # We cannot stop the handler, but the fence will discard its result.
+                log.warning("lease lost job_id=%s", claimed.id)
+                return
+
+    def _execute(self, claimed: ClaimedJob) -> Outcome:
         try:
             handler = HANDLERS[claimed.task_type]
             payload = PAYLOAD_MODELS[claimed.task_type].model_validate(claimed.payload)
@@ -76,20 +120,70 @@ class Worker:
             result = handler(ctx)
             if len(json.dumps(result)) > MAX_RESULT_BYTES:
                 raise TaskError("Result is too large")
-            return JobStatus.SUCCEEDED, result, None, None
+            return Outcome("success", result=result)
         except TaskError as exc:
-            # Expected failure; the message was written by us, so it is safe to store.
-            return JobStatus.FAILED, None, "TaskError", str(exc)[:500]
+            # Permanent: retrying cannot help. Our own message, safe to store.
+            return Outcome("permanent", error_type="TaskError", error_message=str(exc)[:500])
+        except RetryableError as exc:
+            return Outcome("retryable", error_type="RetryableError", error_message=str(exc)[:500])
         except Exception:
-            # Unknown failure. The full trace goes to the log only; what we store
-            # is generic, because the real message could contain secrets.
+            # Unknown failure: treated as temporary. That is safe because retries are
+            # limited (max_attempts), so a bug cannot loop forever. The full trace goes
+            # to the log only; what we store is generic, because the real message
+            # could contain secrets.
             log.exception("unexpected error job_id=%s task_type=%s", claimed.id, claimed.task_type)
-            return JobStatus.FAILED, None, "UnexpectedError", GENERIC_ERROR
+            return Outcome("retryable", error_type="UnexpectedError", error_message=GENERIC_ERROR)
+
+    def _record(self, claimed: ClaimedJob, outcome: Outcome) -> None:
+        with self._sessions() as session:
+            if outcome.kind == "success":
+                ok = finish_job(session, claimed, status=JobStatus.SUCCEEDED, result=outcome.result)
+                new_status: JobStatus | None = JobStatus.SUCCEEDED if ok else None
+            elif outcome.kind == "permanent":
+                ok = finish_job(
+                    session,
+                    claimed,
+                    status=JobStatus.FAILED,
+                    error_type=outcome.error_type,
+                    error_message=outcome.error_message,
+                )
+                new_status = JobStatus.FAILED if ok else None
+            else:
+                assert outcome.error_type is not None and outcome.error_message is not None
+                new_status = fail_retryable(
+                    session,
+                    claimed,
+                    error_type=outcome.error_type,
+                    error_message=outcome.error_message,
+                    delay_seconds=self._retry.delay_for(claimed.attempt_number),
+                )
+        if new_status is None:
+            log.warning("lease lost, result discarded job_id=%s", claimed.id)
+        else:
+            log.info("recorded job_id=%s new_status=%s", claimed.id, new_status.value)
+
+    # --- recovery ----------------------------------------------------------------
+
+    def sweep_once(self) -> int:
+        with self._sessions() as session:
+            recovered = sweep_expired_leases(session, self._retry)
+        if recovered:
+            log.warning("recovered %d job(s) with expired leases", recovered)
+        return recovered
+
+    def _sweep_if_due(self) -> None:
+        now = time.monotonic()
+        if now - self._last_sweep >= self._sweep_interval:
+            self._last_sweep = now
+            self.sweep_once()
+
+    # --- main loop -----------------------------------------------------------------
 
     def run_forever(self, stop: threading.Event) -> None:
         log.info("worker started worker_id=%s", self.worker_id)
         while not stop.is_set():
             try:
+                self._sweep_if_due()
                 if self.run_once():
                     continue  # more work may be waiting: skip the pause
             except SQLAlchemyError:

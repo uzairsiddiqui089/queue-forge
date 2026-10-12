@@ -1,7 +1,7 @@
 # Architecture
 
-> Status: describes what exists after Milestone 3 (workers). Retries and
-> crash recovery are planned (Milestone 4) and are marked as such.
+> Status: describes what exists after Milestone 4 (failure handling). Metrics,
+> admin endpoints and rate limiting are planned (Milestone 5).
 
 ## Components
 
@@ -69,14 +69,9 @@ If two identical requests arrive together, both try to insert the same `(client_
 
 ### What if a worker crashes?
 
-| Crash happens... | What is left | What happens |
-|---|---|---|
-| Before the claim commits | Job still `queued` | Nothing lost; another worker claims it |
-| After the claim, before or during the handler | Job `running`, attempt row open | **Milestone 3: stuck `running`.** Milestone 4 adds lease expiry and a sweeper to re-queue it |
-| After the handler, before the result is saved | Same as above, and the work was done | Milestone 4 will run it again. This is why handlers must be safe to run twice (at-least-once) |
-| After the result is saved | Job `succeeded` | Nothing to recover |
+See "Failure handling and recovery" below for the full story. In short: the job is left `running`, its lease runs out, and a sweeper puts it back in the queue (or dead-letters it if it has used all its attempts).
 
-The attempt counter goes up at *claim* time, not at the end. So a job that crashes its worker every time still uses up its attempts and will eventually be dead-lettered (Milestone 4) instead of looping forever.
+The attempt counter goes up at *claim* time, not at the end. So a job that crashes its worker every time still uses up its attempts and ends up dead-lettered instead of looping forever.
 
 ### Handlers
 
@@ -86,4 +81,53 @@ Only four task types exist (`echo`, `sleep`, `flaky`, `simulated_notification`).
 
 - Errors we raise on purpose (`TaskError`) store their message.
 - Any other exception stores only a generic message. The real message and stack trace go to the worker log, because exception text can contain secrets.
-- For now every failure is final (`failed`). Telling temporary errors from permanent ones, and retrying, is Milestone 4.
+- Whether a failure is retried depends on its kind (next section).
+
+## Failure handling and recovery (Milestone 4)
+
+### Three kinds of failure
+
+| What went wrong | Kind | What happens |
+|---|---|---|
+| The handler raises `TaskError` | Permanent: retrying cannot help | Job becomes `failed` at once |
+| The handler raises `RetryableError`, or any unknown exception | Temporary | Retried after a delay, up to the attempt limit |
+| The worker disappears (crash, kill, power cut) | Temporary | Recovered by the sweeper when its lease expires |
+
+Unknown exceptions count as temporary on purpose. It is safe because retries are limited: a buggy job cannot loop forever, it just ends up dead-lettered.
+
+### Retries and backoff
+
+- Every job gets **5 attempts** in total (`max_attempts`). The first try is attempt 1.
+- After a temporary failure the job goes back to `queued` with `run_at` set a little in the future. Workers ignore it until then.
+- **Exponential backoff:** the longest possible wait doubles each time (2 s, 4 s, 8 s, 16 s, ... capped at 5 minutes).
+- **Full jitter:** the actual wait is a random time between 0 and that limit. Without the randomness, many jobs that failed together would all retry at the same moment and overload the system again.
+- When attempts run out the job becomes `dead_lettered`, a final state kept for inspection.
+
+### Leases, heartbeats and the sweeper
+
+- When a worker claims a job it gets a **lease**: a deadline (30 s by default) by which it must show it is still alive.
+- While the handler runs, a **heartbeat** thread pushes the deadline forward every 10 s. A long job therefore keeps its lease, while a dead worker stops renewing it.
+- Each worker also runs a **sweeper** every 10 s: it finds `running` jobs whose lease deadline has passed, marks that attempt `lease_expired`, and re-queues the job (or dead-letters it if attempts are used up). `SKIP LOCKED` makes sure each expired job is handled by exactly one sweeper, even with many workers.
+- Nothing can stay `running` forever: either the worker finishes it, or its lease expires and the sweeper deals with it. (This needs at least one worker running.)
+
+### Duplicate execution: it can happen, and here is why
+
+Recovery cannot tell a *dead* worker from a *slow* one (for example a long network pause or a frozen machine). If worker A is only slow, the sweeper re-queues the job and worker B runs it **while A is still running it**, or after A already did the work but before it saved the result. So a job can run more than once. That is what "at-least-once" means, and why QueueForge never claims exactly-once.
+
+What keeps this safe:
+
+1. **The fence.** A's late result is rejected, because the job now carries B's lease token. Only one result is ever stored.
+2. **Idempotent handlers.** The *side effects* of a handler must be safe to repeat. The demo `simulated_notification` task writes to a table keyed by job ID, so a second run changes nothing.
+
+### Duplicate execution timeline (what each crash point means)
+
+| Crash happens... | Result |
+|---|---|
+| Before the claim commits | Job still `queued`; another worker takes it |
+| After the claim, before or during the handler | Lease expires, job re-queued, runs again (the first run did not finish) |
+| After the handler, before the result is saved | Lease expires, job re-queued, **the work is done a second time** |
+| After the result is saved | Nothing to recover |
+
+### Tested
+
+Retry then succeed; retries exhausted; permanent error; unknown exception without leaking its message; a job that crashes every worker is eventually dead-lettered; a late result from a stale worker is rejected; many sweepers at once recover each job exactly once; the heartbeat keeps a long job alive; and a real worker process killed with a hard kill mid-job is recovered by another worker.

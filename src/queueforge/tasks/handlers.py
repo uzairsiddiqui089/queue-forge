@@ -24,7 +24,12 @@ from queueforge.tasks.schemas import (
 
 
 class TaskError(Exception):
-    """A deliberate, expected failure. Its message is written by us and is safe to store."""
+    """A deliberate, PERMANENT failure: retrying cannot help. The message is written by us
+    and is safe to store. The job goes straight to `failed`."""
+
+
+class RetryableError(Exception):
+    """A deliberate, TEMPORARY failure: trying again later may work. Same safe-message rule."""
 
 
 @dataclass(frozen=True)
@@ -50,7 +55,7 @@ def handle_flaky(ctx: HandlerContext) -> dict[str, Any]:
     """Fails on its first `fail_times` attempts, then succeeds (for retry tests)."""
     assert isinstance(ctx.payload, FlakyPayload)
     if ctx.attempt_number <= ctx.payload.fail_times:
-        raise TaskError(f"deliberate failure on attempt {ctx.attempt_number}")
+        raise RetryableError(f"deliberate failure on attempt {ctx.attempt_number}")
     return {"succeeded_on_attempt": ctx.attempt_number}
 
 

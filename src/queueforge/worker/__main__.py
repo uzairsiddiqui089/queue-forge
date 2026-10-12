@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from queueforge.config import get_settings
 from queueforge.db.engine import make_engine
+from queueforge.domain.retry import RetryPolicy
 from queueforge.worker.runner import Worker
 
 
@@ -34,6 +35,12 @@ def main() -> None:
         sessionmaker(engine, expire_on_commit=False),
         worker_id=f"{socket.gethostname()}-{os.getpid()}",
         lease_seconds=settings.worker_lease_seconds,
+        heartbeat_interval=settings.worker_heartbeat_interval_seconds,
+        sweep_interval=settings.worker_sweep_interval_seconds,
+        retry_policy=RetryPolicy(
+            base_delay=settings.retry_base_delay_seconds,
+            max_delay=settings.retry_max_delay_seconds,
+        ),
         poll_interval=settings.worker_poll_interval_seconds,
     )
     worker.run_forever(stop)

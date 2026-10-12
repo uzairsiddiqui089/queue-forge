@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from queueforge.db.base import Base
+from queueforge.domain.retry import DEFAULT_MAX_ATTEMPTS
 from queueforge.domain.states import AttemptOutcome, JobStatus
 
 _STATUS_LIST = ", ".join(f"'{s.value}'" for s in JobStatus)
@@ -49,7 +50,7 @@ class Job(Base):
         String(20), default=JobStatus.QUEUED.value, server_default=JobStatus.QUEUED.value
     )
     attempts: Mapped[int] = mapped_column(default=0, server_default="0")
-    max_attempts: Mapped[int] = mapped_column(default=5, server_default="5")
+    max_attempts: Mapped[int] = mapped_column(default=DEFAULT_MAX_ATTEMPTS, server_default="5")
     run_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Lease fields are used by workers from Milestone 3 onwards.
