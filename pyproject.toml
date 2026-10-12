@@ -11,6 +11,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
     "pydantic-settings>=2.4",
+    "alembic>=1.13",
 ]
 
 [dependency-groups]
@@ -36,6 +37,7 @@ markers = [
 ]
 
 [tool.ruff]
+extend-exclude = ["migrations/versions"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
