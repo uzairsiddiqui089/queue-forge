@@ -37,10 +37,12 @@ ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
     ),
     JobStatus.SUCCEEDED: frozenset(),
     JobStatus.FAILED: frozenset(),
-    JobStatus.DEAD_LETTERED: frozenset(),
+    # Only an admin can move a dead-lettered job, and only back to the queue.
+    JobStatus.DEAD_LETTERED: frozenset({JobStatus.QUEUED}),
 }
 
-TERMINAL_STATUSES = frozenset(s for s, targets in ALLOWED_TRANSITIONS.items() if not targets)
+# Final for the system itself. (A dead-lettered job can still be re-queued by an admin.)
+TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED})
 
 
 def can_transition(current: JobStatus, target: JobStatus) -> bool:

@@ -1,6 +1,5 @@
 """Run a worker: `python -m queueforge.worker`."""
 
-import logging
 import os
 import signal
 import socket
@@ -12,14 +11,13 @@ from sqlalchemy.orm import sessionmaker
 from queueforge.config import get_settings
 from queueforge.db.engine import make_engine
 from queueforge.domain.retry import RetryPolicy
+from queueforge.logging import configure_logging
 from queueforge.worker.runner import Worker
 
 
 def main() -> None:
     settings = get_settings()
-    logging.basicConfig(
-        level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    configure_logging(settings.log_level)
 
     stop = threading.Event()
 

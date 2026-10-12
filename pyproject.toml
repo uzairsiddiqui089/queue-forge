@@ -12,6 +12,8 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pydantic-settings>=2.4",
     "alembic>=1.13",
+    "redis>=5",
+    "prometheus-client>=0.20",
 ]
 
 [dependency-groups]
