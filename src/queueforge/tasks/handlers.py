@@ -78,6 +78,16 @@ def handle_notification(ctx: HandlerContext) -> dict[str, Any]:
     return {"recipient": ctx.payload.recipient, "already_sent": not inserted}
 
 
+# How long a handler may run before the worker gives up on it (the attempt is then retried).
+# Must be longer than the handler's own legitimate maximum (sleep allows up to 30 s).
+HANDLER_TIMEOUT_SECONDS: dict[str, float] = {
+    "echo": 10.0,
+    "sleep": 40.0,
+    "flaky": 10.0,
+    "simulated_notification": 30.0,
+}
+DEFAULT_HANDLER_TIMEOUT_SECONDS = 60.0
+
 HANDLERS: dict[str, Callable[[HandlerContext], dict[str, Any]]] = {
     "echo": handle_echo,
     "sleep": handle_sleep,

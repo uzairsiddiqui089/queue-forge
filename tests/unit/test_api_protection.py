@@ -56,3 +56,27 @@ def test_rate_limiter_fails_open_when_redis_is_down() -> None:
     limiter = RedisRateLimiter.from_url("redis://127.0.0.1:1/0", limit=1)
     for _ in range(3):  # far over the limit, but with no Redis nothing is counted
         assert limiter.check("some-client").allowed is True
+
+
+def test_api_docs_can_be_disabled_for_production() -> None:
+    app = create_app(engine=make_engine(UNREACHABLE_DB), docs_enabled=False)
+    client = TestClient(app, raise_server_exceptions=False)
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, path
+
+
+def test_api_docs_are_available_in_development() -> None:
+    client = TestClient(create_app(engine=make_engine(UNREACHABLE_DB)))
+    assert client.get("/docs").status_code == 200
+
+
+def test_database_down_gives_503_with_retry_after_not_500() -> None:
+    # Authenticating needs the database, which is unreachable here.
+    response = make_app(max_body_bytes=1000).post(
+        "/v1/jobs",
+        content=SMALL_BODY,
+        headers={"Content-Type": "application/json", "X-API-Key": "qf_anything"},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Service temporarily unavailable"}
+    assert response.headers["Retry-After"] == "5"

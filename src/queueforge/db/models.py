@@ -39,6 +39,8 @@ class Job(Base):
         CheckConstraint(f"status IN ({_STATUS_LIST})", name="ck_jobs_status"),
         # Workers (Milestone 3) look for the next queued job by run_at.
         Index("ix_jobs_queued_run_at", "run_at", postgresql_where=text("status = 'queued'")),
+        # Lets the per-client queue cap count a client's waiting jobs without scanning its history.
+        Index("ix_jobs_client_queued", "client_id", postgresql_where=text("status = 'queued'")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -115,3 +117,14 @@ class Notification(Base):
     recipient: Mapped[str] = mapped_column(String(200))
     message: Mapped[str] = mapped_column(String(1000))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class WorkerRecord(Base):
+    """One row per worker process, refreshed regularly: shows which workers are alive."""
+
+    __tablename__ = "workers"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    stopped_at: Mapped[datetime | None] = mapped_column(default=None)  # set on a clean shutdown

@@ -107,7 +107,29 @@ Unknown exceptions count as temporary on purpose. It is safe because retries are
 - When a worker claims a job it gets a **lease**: a deadline (30 s by default) by which it must show it is still alive.
 - While the handler runs, a **heartbeat** thread pushes the deadline forward every 10 s. A long job therefore keeps its lease, while a dead worker stops renewing it.
 - Each worker also runs a **sweeper** every 10 s: it finds `running` jobs whose lease deadline has passed, marks that attempt `lease_expired`, and re-queues the job (or dead-letters it if attempts are used up). `SKIP LOCKED` makes sure each expired job is handled by exactly one sweeper, even with many workers.
-- Nothing can stay `running` forever: either the worker finishes it, or its lease expires and the sweeper deals with it. (This needs at least one worker running.)
+- A job cannot stay `running` forever, because each way it can get stuck has an answer:
+  - **The worker dies:** the lease expires and a sweeper recovers the job. (This needs at least one worker running.)
+  - **The handler hangs but the worker lives:** the heartbeat alone would renew the lease forever, so the worker also enforces a **time limit** per task type (`HANDLER_TIMEOUT_SECONDS`). When it passes, the attempt is recorded as a retryable `HandlerTimeout` and the worker moves on. Python cannot kill a thread, so the stuck thread is abandoned; if 3 pile up, the worker exits and its supervisor restarts it with a clean process.
+  - **The worker is told to stop:** see "Shutdown" below.
+
+  *(An earlier version of this document claimed this without the time limit. That was wrong for hung handlers: the heartbeat kept renewing the lease. It was found in the production-readiness review and fixed in Phase A.)*
+
+### Shutdown (SIGTERM)
+
+A stopping worker claims nothing new. It lets its current job run for up to `WORKER_SHUTDOWN_DRAIN_SECONDS` (25 s). If the job finishes, the result is recorded as usual. If not, the worker **hands the job back**: the job returns to `queued`, the attempt is recorded as `released`, and `max_attempts` goes up by one so the interrupted try is not charged. Then the worker exits cleanly. Docker's `stop_grace_period` (40 s) is longer than the drain so Docker does not kill it first. Without this, every deploy or scale-down would leave jobs `running` until their lease expired, and cost them an attempt.
+
+### Worker supervision
+
+- Any unexpected error in the worker loop is caught. The worker backs off (growing, jittered wait, capped at 30 s) and carries on. The first failure logs a full stack trace; repeated failures log a short line at 2, 4, 8, 16... failures, so an outage does not flood the logs. A "worker recovered" line is logged when it works again.
+- Containers use `restart: unless-stopped`, and workers have a healthcheck (a file touched every few seconds while the loop is alive). Each worker also records itself in the `workers` table, which feeds `queueforge_workers_alive`.
+
+### Backpressure
+
+The API refuses new jobs when the queue is too long: `429` if one client has too many waiting (`MAX_QUEUED_JOBS_PER_CLIENT`), `503` if the whole queue is full (`MAX_QUEUED_JOBS_TOTAL`), both with `Retry-After`. A replay of an earlier idempotent submit is never refused. The count stops at the limit, so the check stays cheap however large the queue grows; under concurrency it is approximate. **Not yet done:** fair scheduling between clients (claiming is still oldest-first overall); that is scheduled after benchmarks show which design is affordable.
+
+### When the database is down or busy
+
+The API answers `503` with `Retry-After` (not `500`) when PostgreSQL is unreachable or every connection in the pool is busy. Every connection has a statement timeout (30 s), a lock timeout (5 s) and an idle-in-transaction timeout (60 s), so a stuck query cannot hold a connection forever.
 
 ### Duplicate execution: it can happen, and here is why
 

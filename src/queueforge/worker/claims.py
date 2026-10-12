@@ -300,3 +300,38 @@ def sweep_expired_leases(session: Session, policy: RetryPolicy, batch_size: int 
             recovered += 1
     session.commit()
     return recovered
+
+
+def release_job(session: Session, claimed: ClaimedJob) -> bool:
+    """Hand a running job back to the queue because its worker is shutting down.
+
+    The attempt is closed as `released` and `max_attempts` goes up by one, so the
+    interrupted attempt does not use up one of the job's tries (`attempts` itself is
+    never reduced, because the attempt history must stay unique and truthful).
+    Fenced like every other worker write. Returns False if the lease was already lost.
+    """
+    assert can_transition(JobStatus.RUNNING, JobStatus.QUEUED)
+    updated = session.execute(
+        update(Job)
+        .where(
+            Job.id == claimed.id,
+            Job.status == JobStatus.RUNNING.value,
+            Job.lease_token == claimed.lease_token,  # the fence
+        )
+        .values(
+            status=JobStatus.QUEUED.value,
+            run_at=func.now(),
+            max_attempts=Job.max_attempts + 1,
+            lease_owner=None,
+            lease_token=None,
+            lease_expires_at=None,
+        )
+        .returning(Job.id)
+        .execution_options(synchronize_session=False)
+    ).first()
+    if updated is None:
+        session.rollback()
+        return False
+    _close_attempt(session, claimed.id, claimed.attempt_number, AttemptOutcome.RELEASED, None, None)
+    session.commit()
+    return True

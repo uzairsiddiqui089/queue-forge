@@ -23,6 +23,8 @@ class AttemptOutcome(StrEnum):
     RETRYABLE_ERROR = "retryable_error"  # used from Milestone 4
     PERMANENT_ERROR = "permanent_error"
     LEASE_EXPIRED = "lease_expired"  # used from Milestone 4
+    # The worker was shut down mid-job and handed the job back. Does not use up an attempt.
+    RELEASED = "released"
 
 
 ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
