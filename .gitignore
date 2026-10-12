@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local AI-assistant and editor files (not part of the project)
+CLAUDE.md
+.claude/
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db
