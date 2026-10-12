@@ -13,6 +13,7 @@ from sqlalchemy import Engine, text
 
 from queueforge.api.deps import AdminClient
 from queueforge.domain.states import AttemptOutcome, JobStatus
+from queueforge.worker.presence import PRESENCE_STALE_SECONDS
 
 router = APIRouter(tags=["metrics"])
 
@@ -47,6 +48,12 @@ class DatabaseCollector:
                     "WHERE status = 'running' AND lease_expires_at < now()"
                 )
             ).scalar_one()
+            workers_alive = conn.execute(
+                text(
+                    "SELECT count(*) FROM workers WHERE stopped_at IS NULL "
+                    f"AND last_seen_at > now() - interval '{PRESENCE_STALE_SECONDS} seconds'"
+                )
+            ).scalar_one()
             by_outcome: dict[str, int] = {
                 row[0]: row[1]
                 for row in conn.execute(
@@ -75,6 +82,12 @@ class DatabaseCollector:
             "queueforge_expired_leases",
             "Running jobs whose lease has expired and not yet been swept (workers may be down)",
             value=float(expired),
+        )
+        yield GaugeMetricFamily(
+            "queueforge_workers_alive",
+            "Worker processes seen in the last 30 seconds. ALERT when this is 0: nothing is "
+            "running jobs or recovering crashed ones",
+            value=float(workers_alive),
         )
         attempts = CounterMetricFamily(
             "queueforge_job_attempts", "Finished attempts by outcome", labels=["outcome"]

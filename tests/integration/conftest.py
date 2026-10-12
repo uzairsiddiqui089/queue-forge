@@ -50,7 +50,8 @@ def clean_tables(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE notifications, job_attempts, idempotency_keys, jobs, api_clients CASCADE"
+                "TRUNCATE workers, notifications, job_attempts, idempotency_keys, "
+                "jobs, api_clients CASCADE"
             )
         )
 

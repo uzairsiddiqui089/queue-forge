@@ -26,6 +26,7 @@ ALLOWED_FIELDS = frozenset(
         "status_code",
         "duration_ms",
         "recovered",
+        "failures",
         "limit",
     }
 )

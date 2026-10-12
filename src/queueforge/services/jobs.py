@@ -8,6 +8,7 @@ so a client never holds a job ID for a job that was not saved.
 import hashlib
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
@@ -16,12 +17,45 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from queueforge.db.models import IdempotencyKey, Job
+from queueforge.domain.states import JobStatus
 
 IDEMPOTENCY_RETENTION = timedelta(hours=24)
 
 
 class IdempotencyConflict(Exception):
     """The same Idempotency-Key was reused with a different request body."""
+
+
+@dataclass(frozen=True)
+class QueueLimits:
+    """Backpressure: the most jobs allowed to wait in the queue."""
+
+    per_client: int = 10_000
+    total: int = 100_000
+    retry_after_seconds: int = 30
+
+
+class QueueFull(Exception):
+    """The queue is at its limit. `scope` is "client" (that client's own cap) or "global"."""
+
+    def __init__(self, scope: str, retry_after_seconds: int) -> None:
+        super().__init__(scope)
+        self.scope = scope
+        self.retry_after_seconds = retry_after_seconds
+
+
+def _queued_at_least(session: Session, limit: int, client_id: uuid.UUID | None) -> bool:
+    """True if at least `limit` jobs are waiting (for one client, or overall).
+
+    Counts only up to `limit` rows, so the cost of the check is bounded no matter how
+    big the queue grows. It is approximate under concurrency: two simultaneous submits
+    can both pass just under the cap. That is fine for a protective limit.
+    """
+    waiting = select(Job.id).where(Job.status == JobStatus.QUEUED.value)
+    if client_id is not None:
+        waiting = waiting.where(Job.client_id == client_id)
+    count = session.scalar(select(func.count()).select_from(waiting.limit(limit).subquery()))
+    return (count or 0) >= limit
 
 
 def request_hash(task_type: str, payload: dict[str, Any]) -> str:
@@ -56,9 +90,13 @@ def submit_job(
     task_type: str,
     payload: dict[str, Any],
     idempotency_key: str | None,
+    limits: QueueLimits | None = None,
 ) -> tuple[Job, bool]:
     """Save a job. Returns (job, created). created=False means an earlier
-    submission with the same idempotency key was returned instead."""
+    submission with the same idempotency key was returned instead.
+
+    Raises QueueFull if `limits` is given and the queue is over its limit. A replay of an
+    earlier submission is never refused: it creates nothing."""
     req_hash = request_hash(task_type, payload)
 
     if idempotency_key is not None:
@@ -73,6 +111,14 @@ def submit_job(
                 IdempotencyKey.expires_at <= func.now(),
             )
         )
+
+    if limits is not None:
+        if _queued_at_least(session, limits.per_client, client_id):
+            session.rollback()
+            raise QueueFull("client", limits.retry_after_seconds)
+        if _queued_at_least(session, limits.total, None):
+            session.rollback()
+            raise QueueFull("global", limits.retry_after_seconds)
 
     job = Job(client_id=client_id, task_type=task_type, payload=payload)
     session.add(job)

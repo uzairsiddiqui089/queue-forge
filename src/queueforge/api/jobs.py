@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Header, HTTPException, Response, status
+from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 
 from queueforge.api.deps import CurrentClient, SessionDep
@@ -38,6 +38,7 @@ class JobOut(BaseModel):
 )
 def submit_job(
     body: JobCreate,
+    request: Request,
     response: Response,
     client: CurrentClient,
     session: SessionDep,
@@ -50,7 +51,19 @@ def submit_job(
             body.task_type,
             body.payload.model_dump(mode="json"),
             idempotency_key,
+            request.app.state.queue_limits,
         )
+    except job_service.QueueFull as full:
+        # Backpressure. A client over its own cap gets 429; a full queue overall gets 503.
+        raise HTTPException(
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+                if full.scope == "client"
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail="Too many queued jobs" if full.scope == "client" else "Queue is full",
+            headers={"Retry-After": str(full.retry_after_seconds)},
+        ) from None
     except job_service.IdempotencyConflict:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

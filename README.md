@@ -119,7 +119,7 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 
 - At-least-once, **not** exactly-once: after a crash or a slow worker, a job can run twice. Only the stored result is protected (by the lease-token fence); side effects must be made safe by the handler.
 - Recovery needs at least one worker running (the sweeper runs inside each worker).
-- Retry settings are global (env vars), not per task type.
+- Retry settings are global (env vars), not per task type. Task time limits are set per task type in code.
 - Rate limiting fails open: if Redis is down there is no limit (a deliberate trade-off, see [operations](docs/operations.md)). Failed logins are not rate limited.
 - No endpoint to create API clients; use the script above. No key rotation or expiry.
 - Job payloads are stored unencrypted. No cleanup of old jobs or keys. See [security](docs/security.md).

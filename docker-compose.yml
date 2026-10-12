@@ -1,18 +1,25 @@
 x-app-env: &app-env
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  # "production" hides the API docs and rejects weak database passwords at startup.
+  ENVIRONMENT: ${ENVIRONMENT:-development}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  # Worker and retry tuning (defaults live in config.py; override in .env if needed).
+  # Tuning knobs. The real defaults live in src/queueforge/config.py; these are only the
+  # ones forwarded from .env. Settings that do not make sense together stop the app at startup.
   WORKER_LEASE_SECONDS: ${WORKER_LEASE_SECONDS:-30}
   WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-10}
   WORKER_SWEEP_INTERVAL_SECONDS: ${WORKER_SWEEP_INTERVAL_SECONDS:-10}
+  WORKER_SHUTDOWN_DRAIN_SECONDS: ${WORKER_SHUTDOWN_DRAIN_SECONDS:-25}
   RETRY_BASE_DELAY_SECONDS: ${RETRY_BASE_DELAY_SECONDS:-2}
   RETRY_MAX_DELAY_SECONDS: ${RETRY_MAX_DELAY_SECONDS:-300}
   RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
   MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-65536}
+  MAX_QUEUED_JOBS_PER_CLIENT: ${MAX_QUEUED_JOBS_PER_CLIENT:-10000}
+  MAX_QUEUED_JOBS_TOTAL: ${MAX_QUEUED_JOBS_TOTAL:-100000}
 
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -33,6 +40,7 @@ services:
   # in production, use a password and TLS.
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
@@ -44,6 +52,7 @@ services:
   # Runs once: applies database migrations, then exits. The API and workers wait for it.
   migrate:
     build: .
+    restart: "no"
     command: ["alembic", "upgrade", "head"]
     environment: *app-env
     depends_on:
@@ -52,6 +61,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     environment:
       <<: *app-env
       REDIS_URL: redis://redis:6379/0
@@ -62,15 +72,41 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+    healthcheck:
+      # Liveness only (/healthz never touches the database).
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # Scale with: docker compose up -d --scale worker=4
   worker:
     build: .
+    restart: unless-stopped
     command: ["python", "-m", "queueforge.worker"]
     environment: *app-env
+    # Must be longer than WORKER_SHUTDOWN_DRAIN_SECONDS, so a stopping worker can finish or
+    # hand back its current job before Docker kills it.
+    stop_grace_period: 40s
     depends_on:
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      # The worker touches this file every few seconds while its loop is alive.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/queueforge-worker-alive') < 60 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   pgdata:
