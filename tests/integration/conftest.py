@@ -1,7 +1,8 @@
-"""Fixtures for tests that need a real PostgreSQL.
+"""Fixtures for tests that need a real PostgreSQL (and, for some, a real Redis).
 
 Safety: these tests wipe tables, so they only run against a database whose name
-ends in "_test" (TEST_DATABASE_URL), never the development database.
+ends in "_test" (TEST_DATABASE_URL), never the development database. Redis tests
+use TEST_REDIS_URL (a separate Redis database number) and flush only that.
 """
 
 import os
@@ -9,6 +10,7 @@ import uuid
 from collections.abc import Callable, Iterator
 
 import pytest
+import redis
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
@@ -58,16 +60,37 @@ def api(engine: Engine) -> TestClient:
     return TestClient(create_app(engine=engine))
 
 
-@pytest.fixture
-def make_client(engine: Engine) -> Callable[[str], tuple[uuid.UUID, str]]:
-    """Create an API client; returns (client_id, raw_api_key)."""
-
+def _client_factory(engine: Engine, role: str) -> Callable[[str], tuple[uuid.UUID, str]]:
     def _make(name: str) -> tuple[uuid.UUID, str]:
         key = generate_api_key()
         with Session(engine) as session:
-            client = ApiClient(name=name, key_hash=hash_api_key(key))
+            client = ApiClient(name=name, key_hash=hash_api_key(key), role=role)
             session.add(client)
             session.commit()
             return client.id, key
 
     return _make
+
+
+@pytest.fixture
+def make_client(engine: Engine) -> Callable[[str], tuple[uuid.UUID, str]]:
+    """Create an ordinary API client; returns (client_id, raw_api_key)."""
+    return _client_factory(engine, "client")
+
+
+@pytest.fixture
+def make_admin(engine: Engine) -> Callable[[str], tuple[uuid.UUID, str]]:
+    """Create an admin API client; returns (client_id, raw_api_key)."""
+    return _client_factory(engine, "admin")
+
+
+@pytest.fixture
+def redis_client() -> Iterator["redis.Redis"]:
+    url = os.environ.get("TEST_REDIS_URL")
+    if url is None:
+        pytest.skip("TEST_REDIS_URL is not set")
+    client = redis.Redis.from_url(url, decode_responses=True)
+    client.flushdb()
+    yield client
+    client.flushdb()
+    client.close()

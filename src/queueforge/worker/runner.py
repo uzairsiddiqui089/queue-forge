@@ -64,6 +64,16 @@ class Worker:
         self._retry = retry_policy or RetryPolicy()
         self._last_sweep = float("-inf")
 
+    def _fields(self, claimed: ClaimedJob) -> dict[str, Any]:
+        """The only job details we ever log: identifiers, never the payload."""
+        return {
+            "job_id": str(claimed.id),
+            "task_type": claimed.task_type,
+            "attempt": claimed.attempt_number,
+            "max_attempts": claimed.max_attempts,
+            "worker_id": self.worker_id,
+        }
+
     # --- one job ---------------------------------------------------------------
 
     def run_once(self) -> bool:
@@ -73,15 +83,7 @@ class Worker:
         if claimed is None:
             return False
 
-        # Log identifiers only. Never the payload.
-        log.info(
-            "claimed job_id=%s task_type=%s attempt=%d/%d worker_id=%s",
-            claimed.id,
-            claimed.task_type,
-            claimed.attempt_number,
-            claimed.max_attempts,
-            self.worker_id,
-        )
+        log.info("job claimed", extra=self._fields(claimed))
         # The handler runs here, with no database transaction open.
         outcome = self._execute_with_heartbeat(claimed)
         self._record(claimed, outcome)
@@ -105,11 +107,11 @@ class Worker:
                         session, claimed.id, claimed.lease_token, self._lease_seconds
                     )
             except SQLAlchemyError:
-                log.exception("heartbeat failed job_id=%s; will try again", claimed.id)
+                log.exception("heartbeat failed; will try again", extra=self._fields(claimed))
                 continue
             if not still_ours:
                 # We cannot stop the handler, but the fence will discard its result.
-                log.warning("lease lost job_id=%s", claimed.id)
+                log.warning("lease lost", extra=self._fields(claimed))
                 return
 
     def _execute(self, claimed: ClaimedJob) -> Outcome:
@@ -131,7 +133,7 @@ class Worker:
             # limited (max_attempts), so a bug cannot loop forever. The full trace goes
             # to the log only; what we store is generic, because the real message
             # could contain secrets.
-            log.exception("unexpected error job_id=%s task_type=%s", claimed.id, claimed.task_type)
+            log.exception("unexpected error in handler", extra=self._fields(claimed))
             return Outcome("retryable", error_type="UnexpectedError", error_message=GENERIC_ERROR)
 
     def _record(self, claimed: ClaimedJob, outcome: Outcome) -> None:
@@ -158,9 +160,11 @@ class Worker:
                     delay_seconds=self._retry.delay_for(claimed.attempt_number),
                 )
         if new_status is None:
-            log.warning("lease lost, result discarded job_id=%s", claimed.id)
+            log.warning("lease lost, result discarded", extra=self._fields(claimed))
         else:
-            log.info("recorded job_id=%s new_status=%s", claimed.id, new_status.value)
+            log.info(
+                "job recorded", extra={**self._fields(claimed), "new_status": new_status.value}
+            )
 
     # --- recovery ----------------------------------------------------------------
 
@@ -168,7 +172,10 @@ class Worker:
         with self._sessions() as session:
             recovered = sweep_expired_leases(session, self._retry)
         if recovered:
-            log.warning("recovered %d job(s) with expired leases", recovered)
+            log.warning(
+                "recovered jobs with expired leases",
+                extra={"recovered": recovered, "worker_id": self.worker_id},
+            )
         return recovered
 
     def _sweep_if_due(self) -> None:
@@ -180,7 +187,7 @@ class Worker:
     # --- main loop -----------------------------------------------------------------
 
     def run_forever(self, stop: threading.Event) -> None:
-        log.info("worker started worker_id=%s", self.worker_id)
+        log.info("worker started", extra={"worker_id": self.worker_id})
         while not stop.is_set():
             try:
                 self._sweep_if_due()
@@ -189,4 +196,4 @@ class Worker:
             except SQLAlchemyError:
                 log.exception("database error; will retry")
             stop.wait(self._poll_interval)
-        log.info("worker stopped worker_id=%s", self.worker_id)
+        log.info("worker stopped", extra={"worker_id": self.worker_id})

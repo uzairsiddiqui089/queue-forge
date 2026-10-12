@@ -5,14 +5,21 @@ Clients submit jobs over HTTP; separate worker processes claim and execute them
 with at-least-once semantics. It is a learning and portfolio project that
 focuses on correct, explainable backend engineering.
 
-> **Status: Milestone 4 (failure handling).** You can submit jobs, and separate
-> worker processes claim and run them. Failed jobs are retried with backoff,
-> jobs from crashed workers are recovered, and jobs that keep failing are
-> dead-lettered. The system is **at-least-once**: a job can run more than once
-> (see [architecture](docs/architecture.md)), so handlers must be idempotent. See [docs/project-brief.md](docs/project-brief.md) for the plan and
-> [docs/architecture.md](docs/architecture.md) for how it works.
+> **Status: Milestone 5 (security and observability).** You can submit jobs, and
+> separate worker processes claim and run them. Failed jobs are retried with
+> backoff, jobs from crashed workers are recovered, and jobs that keep failing are
+> dead-lettered (admins can inspect and re-queue them). The system is
+> **at-least-once**: a job can run more than once (see
+> [architecture](docs/architecture.md)), so handlers must be idempotent.
+> Docs: [project brief](docs/project-brief.md) · [architecture](docs/architecture.md) ·
+> [operations](docs/operations.md) · [security](docs/security.md).
 
 ## Implemented
+
+- Structured JSON logs with a field allow-list (payloads, keys and query strings are never logged; tested)
+- `GET /metrics` (Prometheus format, admin key): jobs per state, oldest queued job age, expired leases, attempts by outcome
+- Admin endpoints: list dead-lettered jobs, view a job's attempt history, re-queue a dead-lettered job
+- Per-key rate limiting with Redis (Redis holds only counters; if it is down the API keeps working), 64 KB request body limit, generic `500` errors without stack traces
 
 - Separate worker processes (`python -m queueforge.worker`) that claim jobs safely with `FOR UPDATE SKIP LOCKED`, so no two workers take the same job
 - Four task handlers (`echo`, `sleep`, `flaky`, `simulated_notification`), results and sanitized errors saved, every attempt recorded in `job_attempts`
@@ -26,7 +33,7 @@ focuses on correct, explainable backend engineering.
 - Per-client isolation: another client's job returns `404`
 - FastAPI app with `GET /healthz` (liveness) and `GET /readyz` (readiness, checks the database)
 - Environment-based configuration (no secrets in code)
-- Docker Compose stack: API + PostgreSQL 16
+- Docker Compose stack: PostgreSQL 16, Redis 7, one-time migrations, API and scalable workers
 - Tests (pytest), linting and formatting (Ruff), strict type checking (mypy)
 - GitHub Actions CI running the same checks against a Postgres service container
 
@@ -40,7 +47,7 @@ focuses on correct, explainable backend engineering.
 ```bash
 cp .env.example .env          # then edit .env: set a real POSTGRES_PASSWORD
                               # (and the same password inside DATABASE_URL)
-docker compose up -d --build            # db, one-time migrate, api, one worker
+docker compose up -d --build            # db, redis, one-time migrate, api, one worker
 docker compose up -d --scale worker=4   # run 4 workers instead
 curl localhost:8000/healthz   # {"status":"ok"}
 curl localhost:8000/readyz    # {"status":"ready"}
@@ -60,10 +67,12 @@ uv run pytest                 # tests
 
 Integration tests need a running PostgreSQL and a `TEST_DATABASE_URL` environment
 variable pointing at a **separate** database whose name ends in `_test` (the tests
-wipe its tables and refuse to run otherwise). Without it they are skipped.
+wipe its tables and refuse to run otherwise). Without it they are skipped. The
+rate-limit tests also need `TEST_REDIS_URL` (use a separate Redis database number,
+for example `/15`; the tests flush it) and are skipped without it.
 
 ```bash
-docker compose up -d db
+docker compose up -d db redis
 docker compose exec db psql -U <POSTGRES_USER> -d postgres -c "CREATE DATABASE queueforge_test"
 ```
 
@@ -110,11 +119,12 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 
 - At-least-once, **not** exactly-once: after a crash or a slow worker, a job can run twice. Only the stored result is protected (by the lease-token fence); side effects must be made safe by the handler.
 - Recovery needs at least one worker running (the sweeper runs inside each worker).
-- Dead-lettered jobs can be read through the API but there is no admin endpoint to inspect or re-queue them yet (Milestone 5).
 - Retry settings are global (env vars), not per task type.
-- No request body size limit or rate limiting yet (planned for Milestone 5).
-- No endpoint to create API clients; use the script above.
-- The Compose file is for local development only (ports bound to localhost, no TLS).
+- Rate limiting fails open: if Redis is down there is no limit (a deliberate trade-off, see [operations](docs/operations.md)). Failed logins are not rate limited.
+- No endpoint to create API clients; use the script above. No key rotation or expiry.
+- Job payloads are stored unencrypted. No cleanup of old jobs or keys. See [security](docs/security.md).
+- The Compose file is for local development only (ports bound to localhost, no TLS, no Redis password).
+- No performance numbers yet: benchmarks are planned (Milestone 6).
 
 ## License
 

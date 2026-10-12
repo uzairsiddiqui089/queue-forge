@@ -7,6 +7,8 @@ x-app-env: &app-env
   WORKER_SWEEP_INTERVAL_SECONDS: ${WORKER_SWEEP_INTERVAL_SECONDS:-10}
   RETRY_BASE_DELAY_SECONDS: ${RETRY_BASE_DELAY_SECONDS:-2}
   RETRY_MAX_DELAY_SECONDS: ${RETRY_MAX_DELAY_SECONDS:-300}
+  RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
+  MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-65536}
 
 services:
   db:
@@ -26,6 +28,19 @@ services:
       timeout: 3s
       retries: 10
 
+  # Used ONLY for API rate limiting (short-lived counters). Never stores jobs; the API keeps
+  # working if it is down. No password here because it is bound to localhost for development;
+  # in production, use a password and TLS.
+  redis:
+    image: redis:7
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # Runs once: applies database migrations, then exits. The API and workers wait for it.
   migrate:
     build: .
@@ -37,12 +52,16 @@ services:
 
   api:
     build: .
-    environment: *app-env
+    environment:
+      <<: *app-env
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
   # Scale with: docker compose up -d --scale worker=4
   worker:

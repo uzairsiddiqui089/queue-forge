@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     database_url: str = Field(min_length=1)
     log_level: str = "INFO"
 
-    # Worker tuning (not secrets).
+    # API protection (not secrets, except that REDIS_URL may contain a password in production).
+    redis_url: str | None = None  # rate limiting only; if unset, rate limiting is off
+    rate_limit_per_minute: int = 120  # per API key
+    max_request_body_bytes: int = 65_536
+
+    # Worker tuning.
     worker_poll_interval_seconds: float = 1.0
     # A claimed job is leased for this long; the worker renews it with a heartbeat while it
     # works, and the sweeper re-queues jobs whose lease expired (the worker is presumed dead).

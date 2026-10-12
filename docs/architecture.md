@@ -1,14 +1,13 @@
 # Architecture
 
-> Status: describes what exists after Milestone 4 (failure handling). Metrics,
-> admin endpoints and rate limiting are planned (Milestone 5).
+> Status: describes what exists after Milestone 5 (security and observability).
 
 ## Components
 
 - **FastAPI API** (stateless): checks the API key, validates the request, saves the job, serves job status. It never runs jobs.
 - **PostgreSQL**: the only place job data lives. All times come from the database clock (`now()`).
 - **Workers**: separate processes (`python -m queueforge.worker`) that claim jobs, run an allow-listed handler and save the result. Run as many as you like.
-- **Redis** *(planned, only if needed in Milestone 5)*: possibly rate limiting. Never stores jobs.
+- **Redis**: per-API-key rate limiting only (short-lived counters). It never stores jobs, results or idempotency keys, and the API keeps working if it is down.
 
 ## Job states
 
@@ -131,3 +130,11 @@ What keeps this safe:
 ### Tested
 
 Retry then succeed; retries exhausted; permanent error; unknown exception without leaking its message; a job that crashes every worker is eventually dead-lettered; a late result from a stale worker is rejected; many sweepers at once recover each job exactly once; the heartbeat keeps a long job alive; and a real worker process killed with a hard kill mid-job is recovered by another worker.
+
+## Protecting and observing the system (Milestone 5)
+
+- **Who can do what:** every `/v1` call needs an API key. Ordinary clients see only their own jobs. Admin keys can also list dead-lettered jobs, see any job with its attempt history, re-queue dead-lettered jobs and read `/metrics`.
+- **Re-queue** is a new legal transition, `dead_lettered` to `queued`, available only to admins. It raises `max_attempts` by 5 instead of resetting `attempts`, so the attempt history stays truthful and unique.
+- **Rate limiting** uses Redis counters per key per minute. If Redis is unavailable the request is allowed (fail open): the limit protects the service, correctness never depends on it.
+- **Request limits:** bodies over 64 KB are refused with `413`, checked both by the `Content-Length` header and by counting the bytes actually received (a client can lie, or send a chunked body).
+- **Logs and metrics:** JSON logs with a fixed allow-list of fields; `/metrics` computed from PostgreSQL at scrape time, so one scrape covers every worker. Details and troubleshooting in [operations.md](operations.md); security notes in [security.md](security.md).
