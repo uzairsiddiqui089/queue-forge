@@ -16,6 +16,15 @@ class JobStatus(StrEnum):
     DEAD_LETTERED = "dead_lettered"
 
 
+class AttemptOutcome(StrEnum):
+    """How one execution attempt ended. An attempt that is still running has no outcome."""
+
+    SUCCEEDED = "succeeded"
+    RETRYABLE_ERROR = "retryable_error"  # used from Milestone 4
+    PERMANENT_ERROR = "permanent_error"
+    LEASE_EXPIRED = "lease_expired"  # used from Milestone 4
+
+
 ALLOWED_TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
     JobStatus.QUEUED: frozenset({JobStatus.RUNNING}),
     JobStatus.RUNNING: frozenset(

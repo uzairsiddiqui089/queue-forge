@@ -55,3 +55,12 @@ JobCreate = Annotated[
     EchoJob | SleepJob | FlakyJob | NotificationJob,
     Field(discriminator="task_type"),
 ]
+
+
+# Used by workers to re-validate a stored payload before running it.
+PAYLOAD_MODELS: dict[str, type[_Strict]] = {
+    "echo": EchoPayload,
+    "sleep": SleepPayload,
+    "flaky": FlakyPayload,
+    "simulated_notification": NotificationPayload,
+}

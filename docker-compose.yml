@@ -1,3 +1,7 @@
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
 services:
   db:
     image: postgres:16
@@ -16,16 +20,32 @@ services:
       timeout: 3s
       retries: 10
 
-  api:
+  # Runs once: applies database migrations, then exits. The API and workers wait for it.
+  migrate:
     build: .
-    environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    ports:
-      - "127.0.0.1:8000:8000"
+    command: ["alembic", "upgrade", "head"]
+    environment: *app-env
     depends_on:
       db:
         condition: service_healthy
+
+  api:
+    build: .
+    environment: *app-env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Scale with: docker compose up -d --scale worker=4
+  worker:
+    build: .
+    command: ["python", "-m", "queueforge.worker"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

@@ -5,13 +5,17 @@ Clients submit jobs over HTTP; separate worker processes claim and execute them
 with at-least-once semantics. It is a learning and portfolio project that
 focuses on correct, explainable backend engineering.
 
-> **Status: Milestone 2 (durable job API).** You can submit jobs and read them
-> back; nothing executes them yet. Workers, retries and recovery are planned, not
-> implemented. See [docs/project-brief.md](docs/project-brief.md) for the plan and
+> **Status: Milestone 3 (workers).** You can submit jobs, and separate worker
+> processes claim and run them. Failed jobs are **not** retried yet, and a job
+> whose worker crashes is **not** recovered yet (both planned for Milestone 4).
+> See [docs/project-brief.md](docs/project-brief.md) for the plan and
 > [docs/architecture.md](docs/architecture.md) for how it works.
 
 ## Implemented
 
+- Separate worker processes (`python -m queueforge.worker`) that claim jobs safely with `FOR UPDATE SKIP LOCKED`, so no two workers take the same job
+- Four task handlers (`echo`, `sleep`, `flaky`, `simulated_notification`), results and sanitized errors saved, every attempt recorded in `job_attempts`
+- Fenced result writes: a worker that lost its lease cannot overwrite a job
 - `POST /v1/jobs` and `GET /v1/jobs/{id}`, with API-key authentication
 - Allow-listed task types with validated payloads: `echo`, `sleep`, `flaky`, `simulated_notification`
 - Jobs stored in PostgreSQL (Alembic migrations run automatically in the API container)
@@ -33,7 +37,8 @@ focuses on correct, explainable backend engineering.
 ```bash
 cp .env.example .env          # then edit .env: set a real POSTGRES_PASSWORD
                               # (and the same password inside DATABASE_URL)
-docker compose up -d --build
+docker compose up -d --build            # db, one-time migrate, api, one worker
+docker compose up -d --scale worker=4   # run 4 workers instead
 curl localhost:8000/healthz   # {"status":"ok"}
 curl localhost:8000/readyz    # {"status":"ready"}
 ```
@@ -100,7 +105,8 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 
 ## Limitations
 
-- Jobs are stored but never executed: no workers, retries or recovery yet.
+- A job that fails is marked `failed` right away: no retries yet (Milestone 4). A job claimed by a worker that then crashes stays `running` forever until recovery exists (Milestone 4).
+- The 30 s lease is recorded but not yet enforced or renewed (no heartbeat or sweeper yet).
 - No request body size limit or rate limiting yet (planned for Milestone 5).
 - No endpoint to create API clients; use the script above.
 - The Compose file is for local development only (ports bound to localhost, no TLS).
