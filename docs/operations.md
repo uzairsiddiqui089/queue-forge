@@ -30,7 +30,9 @@ All settings are environment variables. Copy `.env.example` to `.env` and edit i
 | `WORKER_POLL_INTERVAL_SECONDS` | 1 | How often an idle worker looks for work |
 | `RETRY_BASE_DELAY_SECONDS`, `RETRY_MAX_DELAY_SECONDS` | 2, 300 | Retry backoff (see below) |
 | `ENVIRONMENT` | development | `production` hides `/docs`, `/redoc`, `/openapi.json` and refuses to start with a weak database password (under 12 characters, or a placeholder like `change-me`) |
-| `MAX_QUEUED_JOBS_PER_CLIENT`, `MAX_QUEUED_JOBS_TOTAL` | 10000, 100000 | Backpressure limits; over them, submits get `429` / `503` |
+| `MAX_QUEUED_JOBS_PER_CLIENT`, `MAX_QUEUED_JOBS_TOTAL` | 10000, 100000 | Backpressure limits; over them, submits get `429` / `503`. The per-client cap is exact (advisory lock); the global cap is a soft limit that can be exceeded slightly under simultaneous submits |
+| `QUEUE_DEPTH_CACHE_SECONDS` | 1 | How long the "is the whole queue full?" answer is reused. Counting a deep queue on every submit cost about 48 ms at 100,000 queued jobs. 0 = count every time |
+| `METRICS_CACHE_SECONDS` | 10 | How long `/metrics` results are reused (two queries scan whole tables; a scrape took 0.7-4.4 s with 1,000,000 jobs). The numbers can be up to this many seconds old. 0 = never |
 | `WORKER_SHUTDOWN_DRAIN_SECONDS` | 25 | How long a stopping worker lets its job finish before handing it back. Keep Docker's `stop_grace_period` (40 s) above it |
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT_SECONDS` | 10, 10, 10 | Database connection pool per process |
 | `DB_STATEMENT_TIMEOUT_SECONDS`, `DB_LOCK_TIMEOUT_SECONDS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_SECONDS` | 30, 5, 60 | Server-side limits on every connection |
@@ -150,6 +152,6 @@ Each API key gets `RATE_LIMIT_PER_MINUTE` requests per calendar minute. Over the
 - Single PostgreSQL instance: it is the queue and the only source of truth. Throughput is limited by it (Milestone 6 will measure this).
 - No automatic cleanup of old jobs, attempts or expired idempotency keys.
 - The sweeper runs inside workers: no workers means no recovery (watch `queueforge_workers_alive`).
-- Fair scheduling between clients is not implemented yet; claiming is oldest-first overall (queue caps limit how much one client can hold).
-- No performance numbers yet (benchmarks are the next phase).
+- Fair scheduling between clients is not implemented: claiming is oldest-first overall, so one client's large backlog delays everyone else (measured in `docs/benchmarking.md`: a small client waited a median 116 s behind a 3,000-job backlog, against 0.19 s alone). Queue caps limit how much one client can hold.
+- Performance figures come from a single low-end laptop (see `docs/benchmarking.md`); size the queue caps as throughput x the longest wait you accept, because the defaults allow hours of waiting at low throughput.
 - Local Compose setup has no TLS and no Redis password. Do not expose it to a network as is.

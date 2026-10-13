@@ -1,0 +1,456 @@
+ Image qfbench-migrate Building 
+ Image qfbench-api Building 
+ Image qfbench-worker Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.36kB done
+#1 DONE 0.0s
+
+#2 [api internal] load build definition from Dockerfile
+#2 transferring dockerfile: 757B 0.1s done
+#2 transferring dockerfile: 757B 0.1s done
+#2 DONE 0.2s
+
+#3 [api internal] load metadata for docker.io/library/python:3.12-slim
+#3 ...
+
+#4 [worker internal] load metadata for ghcr.io/astral-sh/uv:0.13.0
+#4 DONE 2.2s
+
+#3 [migrate internal] load metadata for docker.io/library/python:3.12-slim
+#3 DONE 2.3s
+
+#5 [worker internal] load .dockerignore
+#5 transferring context: 146B 0.0s done
+#5 DONE 0.2s
+
+#6 [migrate internal] load build context
+#6 DONE 0.0s
+
+#7 [migrate] FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168
+#7 resolve ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168
+#7 ...
+
+#6 [api internal] load build context
+#6 DONE 0.0s
+
+#7 [api] FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168
+#7 resolve ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 0.2s done
+#7 resolve ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 0.2s done
+#7 DONE 0.3s
+
+#8 [migrate stage-0  1/10] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#8 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.2s done
+#8 DONE 0.3s
+
+#6 [migrate internal] load build context
+#6 transferring context: 2.36kB 0.1s done
+#6 DONE 0.1s
+
+#9 [worker stage-0  4/10] COPY pyproject.toml uv.lock README.md LICENSE ./
+#9 CACHED
+
+#10 [worker stage-0  6/10] COPY src ./src
+#10 CACHED
+
+#11 [worker stage-0  7/10] COPY alembic.ini ./
+#11 CACHED
+
+#12 [worker stage-0  8/10] COPY migrations ./migrations
+#12 CACHED
+
+#13 [worker stage-0  3/10] WORKDIR /app
+#13 CACHED
+
+#14 [worker stage-0  5/10] RUN uv sync --frozen --no-dev --no-install-project
+#14 CACHED
+
+#15 [worker stage-0  9/10] RUN uv sync --frozen --no-dev
+#15 CACHED
+
+#16 [worker stage-0  2/10] COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /usr/local/bin/uv
+#16 CACHED
+
+#17 [worker stage-0 10/10] RUN useradd --system --no-create-home appuser
+#17 CACHED
+
+#18 [migrate] exporting to image
+#18 exporting layers 0.0s done
+#18 exporting manifest sha256:f46dc224a7d21d46b7641f0d1bd76cd62534f8ed41437257965938556c091706 0.1s done
+#18 exporting config sha256:56156aa6a1d8740220432a493d3989ea7f74003cd6d9851ecdd957029c5d98db
+#18 exporting config sha256:56156aa6a1d8740220432a493d3989ea7f74003cd6d9851ecdd957029c5d98db 0.1s done
+#18 exporting attestation manifest sha256:4999f64c3bd5625bf697cabd51f7a001630ea99924f2f28472e1d3256e645fd3
+#18 exporting attestation manifest sha256:4999f64c3bd5625bf697cabd51f7a001630ea99924f2f28472e1d3256e645fd3 1.3s done
+#18 exporting manifest list sha256:89a579e429c13e7904bc349e2cbb5040ec2605e784f2c53f3d06ef41a8d937b3
+#18 exporting manifest list sha256:89a579e429c13e7904bc349e2cbb5040ec2605e784f2c53f3d06ef41a8d937b3 1.3s done
+#18 naming to docker.io/library/qfbench-migrate:latest
+#18 naming to docker.io/library/qfbench-migrate:latest 0.2s done
+#18 unpacking to docker.io/library/qfbench-migrate:latest
+#18 unpacking to docker.io/library/qfbench-migrate:latest 0.2s done
+#18 DONE 4.5s
+
+#19 [api] exporting to image
+#19 exporting layers 0.0s done
+#19 exporting manifest sha256:53d3babc1593a11a6468891c4de4e835b54271ff48ea1229d48e7824df8c58c8 0.1s done
+#19 exporting config sha256:5d8da8d4e6212cdc581cba460f81468d1d342da0ccfcfa1d6d42f9d969484430 0.0s done
+#19 exporting attestation manifest sha256:a065adb40ba5867914e7f7031d8fdd03af98984a51e55765422f8af895c5ec2b 1.0s done
+#19 exporting manifest list sha256:94340fdf08cc55a6b2b0d5b54d9169e1c09ed4bdb7b25e48e137a944bf81ac0a 1.3s done
+#19 naming to docker.io/library/qfbench-api:latest 0.1s done
+#19 unpacking to docker.io/library/qfbench-api:latest 0.2s done
+#19 ...
+
+#20 [worker] exporting to image
+#20 exporting layers 0.1s done
+#20 exporting manifest sha256:2fd597a4379c6b39d690e9e3cf43a7625ba29a667d800d0170f2655469b1173c 0.2s done
+#20 exporting config sha256:00fcb745f2062812731c0094a521118405a112d9bc3e281e0d5c4d127374c633 0.0s done
+#20 exporting attestation manifest sha256:82a74b86f3a8ab5e08abf2de5865c5f8b99e953b5bcec5aaf2bdf0baed8cc1ad 1.0s done
+#20 exporting manifest list sha256:90da54e719f19008bd9e3a406d74fc84af7310af71c7fb386fca75eac1f0431d 1.3s done
+#20 naming to docker.io/library/qfbench-worker:latest 0.2s done
+#20 unpacking to docker.io/library/qfbench-worker:latest 0.2s done
+#20 DONE 4.7s
+
+#19 [api] exporting to image
+#19 DONE 4.7s
+
+#21 [migrate] resolving provenance for metadata file
+#21 DONE 0.4s
+
+#22 [api] resolving provenance for metadata file
+#22 DONE 0.3s
+
+#23 [worker] resolving provenance for metadata file
+#23 DONE 0.1s
+ Image qfbench-migrate Built 
+ Image qfbench-api Built 
+ Image qfbench-worker Built 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-1 Running 
+ Container qfbench-worker-2 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+benchmark stack is up with 2 worker(s) at http://127.0.0.1:18000
+### API submit cost, limiter ON, no workers (so only the API and database are working)
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-worker-1 Stopping 
+ Container qfbench-worker-2 Stopping 
+ Container qfbench-worker-2 Stopped 
+ Container qfbench-worker-2 Removing 
+ Container qfbench-worker-1 Stopped 
+ Container qfbench-worker-1 Removing 
+ Container qfbench-worker-2 Removed 
+ Container qfbench-worker-1 Removed 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=36.5 status={'201': 500} latency p50/p95/p99=0.022/0.050/0.093s
+saved docs\benchmark-results\20261013T003926Z_submit-only_limiter-on-c1.json
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=51.8 status={'201': 500} latency p50/p95/p99=0.074/0.112/0.139s
+saved docs\benchmark-results\20261013T003948Z_submit-only_limiter-on-c4.json
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=40.9 status={'201': 500} latency p50/p95/p99=0.345/0.615/0.795s
+saved docs\benchmark-results\20261013T004012Z_submit-only_limiter-on-c16.json
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=37.0 status={'201': 500} latency p50/p95/p99=1.557/2.167/2.327s
+saved docs\benchmark-results\20261013T004041Z_submit-only_limiter-on-c64.json
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=50.9 status={'201': 500} latency p50/p95/p99=0.300/0.444/0.520s
+saved docs\benchmark-results\20261013T004105Z_submit-only_limiter-on-c16-rep2.json
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=43.8 status={'201': 500} latency p50/p95/p99=0.333/0.605/0.856s
+saved docs\benchmark-results\20261013T004128Z_submit-only_limiter-on-c16-rep3.json
+### API submit cost, rate limiter OFF (BENCH_REDIS_URL empty)
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Recreate 
+ Container qfbench-api-1 Recreated 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-api-1 Started 
+  accepted/s=45.0 status={'201': 500} latency p50/p95/p99=0.334/0.535/0.669s
+saved docs\benchmark-results\20261013T004157Z_submit-only_limiter-off-c16-rep1.json
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=49.1 status={'201': 500} latency p50/p95/p99=0.312/0.455/0.542s
+saved docs\benchmark-results\20261013T004218Z_submit-only_limiter-off-c16-rep2.json
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  accepted/s=48.3 status={'201': 500} latency p50/p95/p99=0.312/0.459/0.611s
+saved docs\benchmark-results\20261013T004241Z_submit-only_limiter-off-c16-rep3.json
+### Worker drain capacity: a queue of echo jobs appears at once
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-worker-1 Creating 
+ Container qfbench-api-1 Recreate 
+ Container qfbench-worker-1 Created 
+ Container qfbench-api-1 Recreated 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-1 Starting 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-worker-1 Started 
+ Container qfbench-api-1 Started 
+  run 1/3: 38.3 jobs/s (3000 jobs in 78.4s; per worker [3000]) err=0 extra_attempts=0
+  run 2/3: 40.1 jobs/s (3000 jobs in 74.9s; per worker [3000]) err=0 extra_attempts=0
+  run 3/3: 35.8 jobs/s (3000 jobs in 83.9s; per worker [3000]) err=0 extra_attempts=0
+saved docs\benchmark-results\20261013T004704Z_drain_echo-w1.json
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-worker-2 Creating 
+ Container qfbench-worker-2 Created 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-2 Starting 
+ Container qfbench-worker-2 Started 
+  run 1/3: 55.8 jobs/s (3000 jobs in 53.7s; per worker [1493, 1507]) err=0 extra_attempts=0
+  run 2/3: 42.7 jobs/s (3000 jobs in 70.2s; per worker [1483, 1517]) err=0 extra_attempts=0
+  run 3/3: 43.4 jobs/s (3000 jobs in 69.1s; per worker [1491, 1509]) err=0 extra_attempts=0
+saved docs\benchmark-results\20261013T005039Z_drain_echo-w2.json
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-1 Running 
+ Container qfbench-worker-2 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-worker-4 Creating 
+ Container qfbench-worker-3 Creating 
+ Container qfbench-worker-4 Created 
+ Container qfbench-worker-3 Created 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-3 Starting 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-3 Started 
+ Container qfbench-worker-4 Starting 
+ Container qfbench-worker-4 Started 
+  run 1/3: 81.6 jobs/s (3000 jobs in 36.8s; per worker [736, 743, 752, 769]) err=0 extra_attempts=0
+  run 2/3: 81.9 jobs/s (3000 jobs in 36.7s; per worker [736, 750, 756, 758]) err=0 extra_attempts=0
+  run 3/3: 92.1 jobs/s (3000 jobs in 32.6s; per worker [742, 749, 751, 758]) err=0 extra_attempts=0
+saved docs\benchmark-results\20261013T005249Z_drain_echo-w4.json
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-1 Running 
+ Container qfbench-worker-2 Running 
+ Container qfbench-worker-3 Running 
+ Container qfbench-worker-4 Running 
+ Container qfbench-worker-8 Creating 
+ Container qfbench-worker-6 Creating 
+ Container qfbench-worker-5 Creating 
+ Container qfbench-worker-7 Creating 
+ Container qfbench-worker-6 Created 
+ Container qfbench-worker-5 Created 
+ Container qfbench-worker-8 Created 
+ Container qfbench-worker-7 Created 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-7 Starting 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-7 Started 
+ Container qfbench-worker-8 Starting 
+ Container qfbench-worker-8 Started 
+ Container qfbench-worker-6 Starting 
+ Container qfbench-worker-6 Started 
+ Container qfbench-worker-5 Starting 
+ Container qfbench-worker-5 Started 
+  run 1/3: 89.2 jobs/s (3000 jobs in 33.6s; per worker [367, 372, 373, 373, 376, 378, 380, 381]) err=0 extra_attempts=0
+  run 2/3: 90.7 jobs/s (3000 jobs in 33.1s; per worker [366, 372, 372, 373, 377, 377, 378, 385]) err=0 extra_attempts=0
+  run 3/3: 91.4 jobs/s (3000 jobs in 32.8s; per worker [365, 369, 372, 372, 376, 376, 382, 388]) err=0 extra_attempts=0
+saved docs\benchmark-results\20261013T005458Z_drain_echo-w8.json
+### Worker drain capacity: mixed 0.05-0.2 s sleep jobs (mean 0.125 s)
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-1 Running 
+ Container qfbench-worker-4 Stopping 
+ Container qfbench-worker-7 Stopping 
+ Container qfbench-worker-8 Stopping 
+ Container qfbench-worker-3 Stopping 
+ Container qfbench-worker-5 Stopping 
+ Container qfbench-worker-2 Stopping 
+ Container qfbench-worker-6 Stopping 
+ Container qfbench-worker-3 Stopped 
+ Container qfbench-worker-3 Removing 
+ Container qfbench-worker-5 Stopped 
+ Container qfbench-worker-5 Removing 
+ Container qfbench-worker-3 Removed 
+ Container qfbench-worker-5 Removed 
+ Container qfbench-worker-8 Stopped 
+ Container qfbench-worker-8 Removing 
+ Container qfbench-worker-7 Stopped 
+ Container qfbench-worker-7 Removing 
+ Container qfbench-worker-8 Removed 
+ Container qfbench-worker-6 Stopped 
+ Container qfbench-worker-6 Removing 
+ Container qfbench-worker-7 Removed 
+ Container qfbench-worker-2 Stopped 
+ Container qfbench-worker-2 Removing 
+ Container qfbench-worker-4 Stopped 
+ Container qfbench-worker-4 Removing 
+ Container qfbench-worker-6 Removed 
+ Container qfbench-worker-4 Removed 
+ Container qfbench-worker-2 Removed 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+Traceback (most recent call last):
+  File "<repo>\scripts\benchmark\bench.py", line 1052, in <module>
+    main()
+  File "<repo>\scripts\benchmark\bench.py", line 1048, in main
+    args.fn(args)
+  File "<repo>\scripts\benchmark\bench.py", line 635, in scenario_drain
+    ids = insert_queued(conn, client_id, args.jobs, args.kind)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>\scripts\benchmark\bench.py", line 617, in insert_queued
+    rows = conn.execute(
+           ^^^^^^^^^^^^^
+  File "<repo>\.venv\Lib\site-packages\psycopg\connection.py", line 304, in execute
+    raise ex.with_traceback(None)
+psycopg.ProgrammingError: incomplete placeholder: '%'; if you want to use '%' as an operator you can double it up, i.e. use '%%'

@@ -1,0 +1,212 @@
+ Container qfbench-db-1 Recreate 
+ Container qfbench-db-1 Recreated 
+ Container qfbench-redis-1 Starting 
+ Container qfbench-db-1 Starting 
+ Container qfbench-redis-1 Started 
+ Container qfbench-db-1 Started 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-1 Starting 
+ Container qfbench-api-1 Started 
+ Container qfbench-worker-1 Started 
+ Container qfbench-worker-3 Starting 
+ Container qfbench-worker-3 Started 
+ Container qfbench-worker-2 Starting 
+ Container qfbench-worker-2 Started 
+ Container qfbench-worker-4 Starting 
+ Container qfbench-worker-4 Started 
+benchmark stack is up with 4 worker(s) at http://127.0.0.1:18000
+### Query plans and timings with the indexes in place (1M history)
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-worker-2 Stopping 
+ Container qfbench-worker-1 Stopping 
+ Container qfbench-worker-3 Stopping 
+ Container qfbench-worker-4 Stopping 
+ Container qfbench-worker-1 Stopped 
+ Container qfbench-worker-1 Removing 
+ Container qfbench-worker-2 Stopped 
+ Container qfbench-worker-2 Removing 
+ Container qfbench-worker-3 Stopped 
+ Container qfbench-worker-3 Removing 
+ Container qfbench-worker-4 Stopped 
+ Container qfbench-worker-4 Removing 
+ Container qfbench-worker-1 Removed 
+ Container qfbench-worker-2 Removed 
+ Container qfbench-worker-3 Removed 
+ Container qfbench-worker-4 Removed 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+current schema:
+  claim_next_job: [3.54, 1.7, 1.89] ms  <- Limit  (cost=1.30..2.22 rows=1 width=38) (actual time=1.527..1.529 row
+  sweeper_find_expired: [0.43, 0.53, 0.43] ms  <- Limit  (cost=0.27..8.30 rows=1 width=38) (actual time=0.051..0.361 row
+  per_client_queue_count: [25.53, 13.6, 10.84] ms  <- Aggregate  (cost=71.78..71.79 rows=1 width=8) (actual time=10.779..10.
+  global_queue_count: [116.75, 18.54, 34.85] ms  <- Aggregate  (cost=2651.23..2651.24 rows=1 width=8) (actual time=18.488.
+  dead_letter_listing: [2.07, 0.17, 0.18] ms  <- Limit  (cost=0.29..75.91 rows=50 width=224) (actual time=0.024..0.094 
+  metrics_jobs_by_status: [540.81, 534.0, 777.09] ms  <- Finalize GroupAggregate  (cost=33305.54..33306.55 rows=4 width=17) (ac
+  metrics_oldest_queued: [1.65, 1.33, 1.17] ms  <- Result  (cost=0.67..0.69 rows=1 width=32) (actual time=1.133..1.134 ro
+  metrics_oldest_running: [71.45, 0.48, 0.39] ms  <- Aggregate  (cost=436.65..436.66 rows=1 width=32) (actual time=0.339..0
+  metrics_expired_leases: [0.17, 0.1, 0.21] ms  <- Aggregate  (cost=8.29..8.30 rows=1 width=8) (actual time=0.064..0.065 
+  metrics_attempts_by_outcome: [836.86, 1595.52, 1793.29] ms  <- Finalize GroupAggregate  (cost=19874.46..19874.71 rows=1 width=18) (ac
+  get_job_by_id: [0.08, 0.07, 0.07] ms  <- Index Scan using jobs_pkey on jobs  (cost=0.42..8.44 rows=1 width=224)
+  attempt_history_for_job: [16.28, 0.13, 0.07] ms  <- Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.
+with candidate indexes (created in a transaction, rolled back afterwards):
+  claim_next_job: [1.87, 1.66, 1.64] ms  <- Limit  (cost=1.30..2.23 rows=1 width=38) (actual time=1.563..1.566 row
+  sweeper_find_expired: [0.51, 0.39, 0.46] ms  <- Limit  (cost=0.13..8.16 rows=1 width=38) (actual time=0.071..0.316 row
+  per_client_queue_count: [35.33, 34.8, 70.68] ms  <- Aggregate  (cost=69.93..69.94 rows=1 width=8) (actual time=34.732..34.
+  global_queue_count: [125.59, 93.97, 96.08] ms  <- Aggregate  (cost=2610.63..2610.64 rows=1 width=8) (actual time=93.901.
+  dead_letter_listing: [0.29, 0.36, 0.22] ms  <- Limit  (cost=0.29..77.10 rows=50 width=429) (actual time=0.036..0.158 
+  metrics_jobs_by_status: [715.29, 580.45, 844.37] ms  <- Finalize GroupAggregate  (cost=33305.51..33306.27 rows=3 width=17) (ac
+  metrics_oldest_queued: [1.73, 2.09, 6.4] ms  <- Result  (cost=0.67..0.69 rows=1 width=32) (actual time=1.662..1.665 ro
+  metrics_oldest_running: [0.66, 0.53, 0.85] ms  <- Aggregate  (cost=16.60..16.62 rows=1 width=32) (actual time=0.459..0.4
+  metrics_expired_leases: [0.15, 0.26, 0.14] ms  <- Aggregate  (cost=8.15..8.16 rows=1 width=8) (actual time=0.088..0.089 
+  metrics_attempts_by_outcome: [696.65, 507.2, 658.66] ms  <- Finalize GroupAggregate  (cost=19874.46..19874.71 rows=1 width=18) (ac
+  get_job_by_id: [0.06, 0.09, 0.17] ms  <- Index Scan using jobs_pkey on jobs  (cost=0.42..8.44 rows=1 width=429)
+  attempt_history_for_job: [0.08, 0.15, 0.17] ms  <- Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.
+  GET /metrics seconds: [1.95, 0.173, 0.108]
+saved docs\benchmark-results\20261013T134644Z_plans_1m-after-indexes.json
+### Drain capacity with 1M history, after the indexes (before: 57.7-61.3 jobs/s)
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-4 Creating 
+ Container qfbench-worker-2 Creating 
+ Container qfbench-worker-1 Creating 
+ Container qfbench-worker-3 Creating 
+ Container qfbench-worker-3 Created 
+ Container qfbench-worker-2 Created 
+ Container qfbench-worker-4 Created 
+ Container qfbench-worker-1 Created 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-1 Starting 
+ Container qfbench-worker-1 Started 
+ Container qfbench-worker-4 Starting 
+ Container qfbench-worker-4 Started 
+ Container qfbench-worker-2 Starting 
+ Container qfbench-worker-2 Started 
+ Container qfbench-worker-3 Starting 
+ Container qfbench-worker-3 Started 
+  run 1/3: 29.1 jobs/s (3000 jobs in 103.1s; per worker [742, 749, 754, 755]) err=0 extra_attempts=0
+  run 2/3: 37.0 jobs/s (3000 jobs in 81.0s; per worker [746, 749, 750, 755]) err=0 extra_attempts=0
+  run 3/3: 44.2 jobs/s (3000 jobs in 67.9s; per worker [743, 750, 750, 757]) err=0 extra_attempts=0
+saved docs\benchmark-results\20261013T135228Z_drain_echo-w4-1m-history-after.json
+### /metrics scrapes: cache 10 s vs cache off
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-worker-2 Stopping 
+ Container qfbench-worker-3 Stopping 
+ Container qfbench-worker-4 Stopping 
+ Container qfbench-worker-1 Stopping 
+ Container qfbench-worker-2 Stopped 
+ Container qfbench-worker-2 Removing 
+ Container qfbench-worker-1 Stopped 
+ Container qfbench-worker-1 Removing 
+ Container qfbench-worker-4 Stopped 
+ Container qfbench-worker-4 Removing 
+ Container qfbench-worker-2 Removed 
+ Container qfbench-worker-3 Stopped 
+ Container qfbench-worker-3 Removing 
+ Container qfbench-worker-1 Removed 
+ Container qfbench-worker-4 Removed 
+ Container qfbench-worker-3 Removed 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  /metrics seconds: [1.168, 0.072, 0.083, 0.072, 0.058, 0.059]  tables={'jobs': {'live_rows': 1003000, 'dead_rows': 165547, 'total_bytes': 274956288, 'table_bytes': 212393984}, 'job_attempts': {'live_rows': 3000, 'dead_rows': 6123, 'total_bytes': 221659136, 'table_bytes': 103817216}}
+saved docs\benchmark-results\20261013T135253Z_scrape_1m-cache10s.json
+ Container qfbench-redis-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-migrate-1 Recreate 
+ Container qfbench-migrate-1 Recreated 
+ Container qfbench-api-1 Recreate 
+ Container qfbench-api-1 Recreated 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-api-1 Started 
+  /metrics seconds: [0.736, 0.791, 0.888, 0.716, 0.906, 0.802]  tables={'jobs': {'live_rows': 1003000, 'dead_rows': 165547, 'total_bytes': 274956288, 'table_bytes': 212393984}, 'job_attempts': {'live_rows': 3000, 'dead_rows': 6123, 'total_bytes': 221659136, 'table_bytes': 103817216}}
+saved docs\benchmark-results\20261013T135320Z_scrape_1m-cache0.json
+### Submit cost with 100,000 jobs already queued: global-check cache 1 s vs off
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-migrate-1 Recreate 
+ Container qfbench-migrate-1 Recreated 
+ Container qfbench-api-1 Recreate 
+ Container qfbench-api-1 Recreated 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-api-1 Started 
+Traceback (most recent call last):
+  File "<repo>\scripts\benchmark\bench.py", line 1123, in <module>
+    main()
+  File "<repo>\scripts\benchmark\bench.py", line 1119, in main
+    args.fn(args)
+  File "<repo>\scripts\benchmark\bench.py", line 611, in scenario_submit_only
+    f"latency p50/p95/p99={lat['p50']:.3f}/{lat['p95']:.3f}/{lat['p99']:.3f}s")  # fmt: skip
+                          ^^^^^^^^^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__

@@ -52,3 +52,7 @@ python_version = "3.12"
 strict = true
 mypy_path = "src"
 packages = ["queueforge"]
+
+[tool.ruff.lint.per-file-ignores]
+# The benchmark script has long SQL strings that cannot be wrapped sensibly.
+"scripts/benchmark/*" = ["E501"]
