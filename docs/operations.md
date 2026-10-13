@@ -89,6 +89,8 @@ Useful messages: `job claimed`, `job recorded` (with `new_status`), `lease lost`
 
 Things worth alerting on: `queueforge_jobs{status="dead_lettered"}` growing; oldest queued age above what your users accept; expired leases above 0 for more than a minute or two.
 
+Ready-made Prometheus alert rules are in [deploy/monitoring/alerts.yml](../deploy/monitoring/alerts.yml) (with an example scrape config), and [runbooks.md](runbooks.md) says what each alert means and what to do. The rules file is checked by a unit test (well formed, only real metrics, every alert has a runbook); it has **not** been run against a live Prometheus here, and the scrape example is untested.
+
 ## Data retention (cleanup)
 
 Without cleanup the database only grows. Measured with 1,000,000 finished jobs: every worker's lease sweep scanned the whole table, `/metrics` took seconds, and throughput was 25-35% lower (see [benchmarking.md](benchmarking.md)). The `maintenance` service deletes old data continuously.

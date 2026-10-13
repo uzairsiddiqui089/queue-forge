@@ -11,7 +11,7 @@ focuses on correct, explainable backend engineering.
 > **at-least-once**: a job can run more than once, so handlers must be idempotent.
 > Docs: [architecture](docs/architecture.md) · [operations](docs/operations.md) ·
 > [security](docs/security.md) · [benchmarking](docs/benchmarking.md) ·
-> [demo walkthrough](docs/demo.md) · [decision records](docs/decisions/README.md) ·
+> [runbooks](docs/runbooks.md) · [demo walkthrough](docs/demo.md) · [decision records](docs/decisions/README.md) ·
 > [project brief](docs/project-brief.md).
 
 ## How it works
