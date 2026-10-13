@@ -7,6 +7,7 @@ The key is shown only here; the database keeps just its hash.
 
 import argparse
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from queueforge.config import get_settings
@@ -31,7 +32,11 @@ def main() -> None:
                 role="admin" if args.admin else "client",
             )
         )
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            message = f"A client named '{args.name}' already exists. Pick another name."
+            raise SystemExit(message) from None
     print(f"Client '{args.name}' created.")
     print(f"API key (save it now, it cannot be shown again): {key}")
 

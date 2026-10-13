@@ -1,0 +1,68 @@
+# Prometheus alert rules for QueueForge. Every alert links to a section of
+# docs/runbooks.md that says what it means and what to do. The thresholds are starting points
+# for a small deployment: tune them to what your users accept. Only metrics that QueueForge
+# really exposes at /metrics are used (a test checks this).
+groups:
+  - name: queueforge
+    rules:
+      - alert: QueueForgeMetricsMissing
+        expr: up{job="queueforge"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "QueueForge /metrics cannot be scraped"
+          description: "The API is down, unreachable, or the scrape key is wrong. No other alert can fire while this is true."
+          runbook: "docs/runbooks.md#queueforgemetricsmissing"
+
+      - alert: QueueForgeNoWorkers
+        expr: queueforge_workers_alive == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No QueueForge worker is alive"
+          description: "Nothing is running jobs, and crashed jobs are not being recovered (the sweeper runs inside workers)."
+          runbook: "docs/runbooks.md#queueforgenoworkers"
+
+      - alert: QueueForgeQueueLagHigh
+        expr: queueforge_oldest_queued_job_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Jobs have been waiting more than 5 minutes"
+          description: "The oldest job that is ready to run has waited {{ $value | humanizeDuration }}. Workers are too few, too slow, or stuck."
+          runbook: "docs/runbooks.md#queueforgequeuelaghigh"
+
+      - alert: QueueForgeExpiredLeases
+        expr: queueforge_expired_leases > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Running jobs have expired leases that are not being swept"
+          description: "{{ $value }} job(s) belong to workers that stopped heartbeating and nobody has recovered them yet."
+          runbook: "docs/runbooks.md#queueforgeexpiredleases"
+
+      - alert: QueueForgeDeadLetterGrowing
+        expr: delta(queueforge_jobs{status="dead_lettered"}[1h]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Jobs are being dead-lettered"
+          description: "The number of dead-lettered jobs grew over the last hour. These jobs used all their attempts and need a person to look at them."
+          runbook: "docs/runbooks.md#queueforgedeadlettergrowing"
+
+      - alert: QueueForgeRetentionStalled
+        # 31 days = the longest default retention (30 days for failed and dead-lettered jobs)
+        # plus a day of slack. If you change RETENTION_*_DAYS, change this number too.
+        expr: queueforge_oldest_finished_job_age_seconds > 31 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Old finished jobs are not being deleted"
+          description: "The maintenance service has stopped (or is failing), so the database will keep growing."
+          runbook: "docs/runbooks.md#queueforgeretentionstalled"

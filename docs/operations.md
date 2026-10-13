@@ -89,6 +89,8 @@ Useful messages: `job claimed`, `job recorded` (with `new_status`), `lease lost`
 
 Things worth alerting on: `queueforge_jobs{status="dead_lettered"}` growing; oldest queued age above what your users accept; expired leases above 0 for more than a minute or two.
 
+Ready-made Prometheus alert rules are in [deploy/monitoring/alerts.yml](../deploy/monitoring/alerts.yml) (with an example scrape config), and [runbooks.md](runbooks.md) says what each alert means and what to do. The rules file is checked by a unit test (well formed, only real metrics, every alert has a runbook); it has **not** been run against a live Prometheus here, and the scrape example is untested.
+
 ## Data retention (cleanup)
 
 Without cleanup the database only grows. Measured with 1,000,000 finished jobs: every worker's lease sweep scanned the whole table, `/metrics` took seconds, and throughput was 25-35% lower (see [benchmarking.md](benchmarking.md)). The `maintenance` service deletes old data continuously.
@@ -142,7 +144,7 @@ This writes `queueforge-<database>-<UTC time>.dump`, a `.sha256` checksum and a 
 - **Keep copies somewhere else.** The default `backups` volume sits on the same disk as the database, so it does *not* survive losing the machine. Mount a path on another machine or disk instead, or copy the files off after each run.
 - **Encryption (optional).** Set `BACKUP_PASSPHRASE` and the backup file is encrypted (AES-256 via openssl) and the plain copy is never left behind. Store the passphrase separately and safely: **without it an encrypted backup cannot be restored**, and nobody can recover it for you.
 
-**What you can recover to (read this).** A backup is a snapshot: restoring it brings back the database **as it was when the backup was taken**, and everything after that is lost. With a nightly backup you can lose up to 24 hours of jobs. The 5-minute recovery target set when the roadmap was planned is **not met** by this; reaching it needs *point-in-time recovery* (continuous WAL archiving, or a managed PostgreSQL service that provides it), which is **not built here**.
+**What you can recover to (read this).** (With the optional point-in-time recovery below this limit is much smaller.) A backup is a snapshot: restoring it brings back the database **as it was when the backup was taken**, and everything after that is lost. With a nightly backup you can lose up to 24 hours of jobs. The 5-minute recovery target set when the roadmap was planned is **not met** by this; reaching it needs *point-in-time recovery* (continuous WAL archiving, or a managed PostgreSQL service that provides it), which is **not built here**.
 
 **How long a restore takes (RTO).** Measured on the benchmark laptop with 1,000,000 jobs and as many attempts: see section 3.10 of [benchmarking.md](benchmarking.md). Your hardware will differ; measure your own with the drill below.
 
@@ -171,6 +173,61 @@ docker compose --profile tools run --rm dbtools verify /backups/<file>   # verif
 - **API clients created after the backup are gone.** Their keys stop working; create them again.
 
 **Limits.** Backups restore the whole database or nothing (there is no restore of a single job). The default location is on the same host. Backups taken while the system is busy contain whatever was committed at one instant, which is consistent but may include jobs mid-flight (see above). Nothing here backs up Redis (it holds only rate-limit counters, which do not matter after a restore) or your `.env` file (keep your secrets in your own secret store).
+
+## Point-in-time recovery (optional)
+
+The plain backups above are snapshots: a restore loses everything since the last backup. **Point-in-time recovery (PITR)** closes that gap. PostgreSQL copies every finished write-ahead-log (WAL) file to an archive, and a *base backup* plus that archive can be restored to **any moment** after the base backup, for example "one minute before the bad deploy".
+
+**Turn it on** (restarts the database once):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.pitr.yml up -d
+```
+
+This sets `archive_mode=on` and copies each WAL segment to the `wal_archive` volume. A segment is closed at least every 60 s (`archive_timeout`), so after a disaster you lose **at most about a minute of recent data plus any WAL that had not been copied yet**. That is the recovery-point figure to plan with; it is not a guarantee.
+
+**Take base backups** (for example daily; keep `BASE_KEEP`, default 3, newest). On Windows with Git Bash, put `MSYS_NO_PATHCONV=1` in front of the command so `/pitr/...` is not rewritten.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.pitr.yml exec -T -u postgres db bash /pitr/basebackup.sh
+```
+
+It also deletes archived WAL that no kept base backup can need; without that the archive would grow forever.
+
+**Watch it.** If copying WAL fails (disk full, archive volume gone), PostgreSQL keeps the WAL in its own `pg_wal` folder and **that can fill the database disk**. Alert on `SELECT failed_count, last_failed_time FROM pg_stat_archiver;` and on the archive volume's free space.
+
+**Recover to a moment**
+
+1. Stop everything that writes: `docker compose stop api worker maintenance db`.
+2. Pick the time (UTC). Choose a time *after* the base backup you will use finished and *before* the damage.
+3. Restore the base backup and WAL settings into a **new, empty** volume. The script refuses a non-empty target, so nothing is overwritten:
+
+```bash
+docker volume create pgdata_recovered
+docker run --rm -u root -v pgdata_recovered:/restore \
+  -v <project>_backups:/backups:ro -v <project>_wal_archive:/wal_archive:ro \
+  -v "$PWD/scripts/pitr":/pitr:ro postgres:16 \
+  bash /pitr/restore.sh /backups/base/<base-backup-name> /restore --to "2026-10-13 12:00:00+00"
+```
+
+   Use `--latest` instead of `--to` to replay all archived WAL.
+4. Start PostgreSQL on that volume (the drill below does exactly this). PostgreSQL replays WAL up to the target, then opens for writes.
+5. Point the `db` service at the recovered volume (for example with a `docker-compose.override.yml` that declares the `pgdata` volume as `external` with the recovered volume's name), start the stack, and check `/readyz` and the metrics. **This last switch-over step is described but was not rehearsed**; the drill rehearses steps 3 and 4.
+
+**Prove it works (run it before you need it)**
+
+```bash
+bash scripts/pitr/drill.sh
+```
+
+It builds a throwaway database with archiving, takes two base backups (checking the old one is pruned), adds rows, notes the time T, **deletes every row**, then restores to T and requires exactly the rows that existed at T. As a control it restores to the latest point and requires the damage (0 rows), so a restore that ignored the target time would fail. It prints `PITR DRILL OK` or says what failed, and removes its containers and volumes.
+
+**Limits (read these)**
+- Measured only on a tiny database: the base backup was about 47 MB and took 1 to 2 s, the whole drill about a minute. **Restore time for a large database, and how long replaying a busy day of WAL takes, were not measured.**
+- By default the archive and base backups sit on the **same disk as the database**, so they do not survive losing the machine. Point the `wal_archive` and `backups` volumes at another disk or machine, or copy them off.
+- Base backups and the WAL archive are **not encrypted** (the `BACKUP_PASSPHRASE` encryption applies to the `pg_dump` backups only).
+- The restore must use the same PostgreSQL major version (16).
+- The logical `pg_dump` backups remain useful: they restore a single database anywhere and are what `verify` checks.
 
 ## Admin tasks
 

@@ -6,4 +6,6 @@
 
 **What it does not give.** Restoring brings back the database as of the last backup; everything after is lost. With nightly backups that is up to 24 hours. A 5-minute recovery goal is **not met**. Backups also sit beside the database unless another location is mounted.
 
+**Update:** point-in-time recovery was added as an optional layer; see [0007](0007-optional-point-in-time-recovery.md). The snapshot backups described here remain.
+
 **Revisit when** losing hours of jobs is not acceptable. The next step is continuous WAL archiving (point-in-time recovery) or a managed PostgreSQL service that provides it. That is not built here.
