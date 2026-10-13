@@ -1,0 +1,22 @@
+# Weekly pull requests that update dependencies, so fixes do not wait for someone to remember.
+# Each one runs the full CI before it can be merged. Nothing is merged automatically.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Also moves the commit SHAs that pin each action in the workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
