@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -414,3 +415,49 @@ def test_workers_alive_metric_and_liveness_file(
 
     with engine.connect() as conn:  # a clean shutdown is recorded
         assert conn.execute(text("SELECT stopped_at IS NOT NULL FROM workers")).scalar_one() is True
+
+
+def test_per_client_cap_holds_under_simultaneous_submits(
+    engine: Engine, sessions: sessionmaker[Session], client_id: uuid.UUID
+) -> None:
+    """Many requests at once must not get past the cap by all seeing 'one below the limit'."""
+    limits = QueueLimits(per_client=5, total=1000)
+    start = threading.Barrier(24)
+
+    def attempt(_: int) -> str:
+        start.wait()  # release all threads at the same moment
+        with sessions() as session:
+            try:
+                job_service.submit_job(session, client_id, "echo", {"message": "x"}, None, limits)
+            except job_service.QueueFull:
+                return "refused"
+            return "accepted"
+
+    with ThreadPoolExecutor(max_workers=24) as pool:
+        results = list(pool.map(attempt, range(24)))
+
+    assert results.count("accepted") == 5
+    assert results.count("refused") == 19
+    with engine.connect() as conn:
+        queued = conn.execute(
+            text("SELECT count(*) FROM jobs WHERE status = 'queued'")
+        ).scalar_one()
+    assert queued == 5  # exactly the cap, never over
+
+
+def test_the_cap_lock_does_not_block_other_clients(
+    sessions: sessionmaker[Session], make_client: MakeClient
+) -> None:
+    alice, _ = make_client("alice")[0], None
+    bob = make_client("bob")[0]
+    limits = QueueLimits(per_client=5, total=1000)
+    with sessions() as holding:  # alice's submit is "in progress": her lock is held
+        holding.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"queue-cap:{alice}"},
+        )
+        started = time.monotonic()
+        with sessions() as session:  # bob is not held up by alice's lock
+            job_service.submit_job(session, bob, "echo", {"message": "x"}, None, limits)
+        assert time.monotonic() - started < 1.0
+        holding.rollback()

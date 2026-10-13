@@ -48,8 +48,10 @@ def _queued_at_least(session: Session, limit: int, client_id: uuid.UUID | None) 
     """True if at least `limit` jobs are waiting (for one client, or overall).
 
     Counts only up to `limit` rows, so the cost of the check is bounded no matter how
-    big the queue grows. It is approximate under concurrency: two simultaneous submits
-    can both pass just under the cap. That is fine for a protective limit.
+    big the queue grows. On its own the check is not safe under concurrency (two submits
+    can both see "one below the cap"), so the per-client check runs under an advisory lock
+    (see submit_job). The GLOBAL cap is not locked: it is a soft limit and can be exceeded
+    slightly by simultaneous submits from different clients.
     """
     waiting = select(Job.id).where(Job.status == JobStatus.QUEUED.value)
     if client_id is not None:
@@ -113,6 +115,13 @@ def submit_job(
         )
 
     if limits is not None:
+        # Make the per-client cap exact. Without this, two simultaneous submits could both
+        # see "499 of 500" and both insert. The lock is held until this transaction ends
+        # (commit or rollback), so one client's check-and-insert steps run one at a time.
+        # Other clients are not affected. The lock wait is bounded by lock_timeout.
+        session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtextextended(f"queue-cap:{client_id}", 0)))
+        )
         if _queued_at_least(session, limits.per_client, client_id):
             session.rollback()
             raise QueueFull("client", limits.retry_after_seconds)

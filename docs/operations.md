@@ -30,7 +30,7 @@ All settings are environment variables. Copy `.env.example` to `.env` and edit i
 | `WORKER_POLL_INTERVAL_SECONDS` | 1 | How often an idle worker looks for work |
 | `RETRY_BASE_DELAY_SECONDS`, `RETRY_MAX_DELAY_SECONDS` | 2, 300 | Retry backoff (see below) |
 | `ENVIRONMENT` | development | `production` hides `/docs`, `/redoc`, `/openapi.json` and refuses to start with a weak database password (under 12 characters, or a placeholder like `change-me`) |
-| `MAX_QUEUED_JOBS_PER_CLIENT`, `MAX_QUEUED_JOBS_TOTAL` | 10000, 100000 | Backpressure limits; over them, submits get `429` / `503` |
+| `MAX_QUEUED_JOBS_PER_CLIENT`, `MAX_QUEUED_JOBS_TOTAL` | 10000, 100000 | Backpressure limits; over them, submits get `429` / `503`. The per-client cap is exact (advisory lock); the global cap is a soft limit that can be exceeded slightly under simultaneous submits |
 | `WORKER_SHUTDOWN_DRAIN_SECONDS` | 25 | How long a stopping worker lets its job finish before handing it back. Keep Docker's `stop_grace_period` (40 s) above it |
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT_SECONDS` | 10, 10, 10 | Database connection pool per process |
 | `DB_STATEMENT_TIMEOUT_SECONDS`, `DB_LOCK_TIMEOUT_SECONDS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_SECONDS` | 30, 5, 60 | Server-side limits on every connection |
