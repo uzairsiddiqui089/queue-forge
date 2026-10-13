@@ -16,6 +16,7 @@ focuses on correct, explainable backend engineering.
 
 ## Implemented
 
+- Fair claiming: workers serve the client with the fewest running jobs first, so one client's backlog no longer blocks the others (a small client's wait behind a 3,000-job backlog fell from about 120 s to 0.06 s in the benchmark)
 - A repeatable benchmark harness (`scripts/benchmark/`) with measured results and findings in [docs/benchmarking.md](docs/benchmarking.md)
 - Structured JSON logs with a field allow-list (payloads, keys and query strings are never logged; tested)
 - `GET /metrics` (Prometheus format, admin key): jobs per state, oldest queued job age, expired leases, attempts by outcome
@@ -126,7 +127,7 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 - Job payloads are stored unencrypted. No cleanup of old jobs or keys. See [security](docs/security.md).
 - The Compose file is for local development only (ports bound to localhost, no TLS, no Redis password).
 - Performance figures exist but come from **one low-end laptop** and are not capacity numbers; see [docs/benchmarking.md](docs/benchmarking.md) for what was measured, what was found and fixed, and the limits. Not yet validated in any production-like environment.
-- **No fairness between clients:** claiming is oldest-first overall, so one client's large backlog delays everyone else (measured: 116 s vs 0.19 s). A fix is designed but not built.
+- **Fairness is approximate beyond 64 clients waiting at once** and means an equal number of running jobs per client, not an equal share of run time. Fair claiming costs a few percent of worker throughput for do-nothing jobs (measured; see [docs/benchmarking.md](docs/benchmarking.md)).
 
 ## License
 

@@ -69,13 +69,20 @@ def submit_only() -> None:
             )
 
 
-def setup(p: dict[str, Any]) -> str:
+def setup(p: dict[str, Any], environment: dict[str, Any] | None = None) -> str:
     parts = []
     parts.append("1M history" if p.get("keep_history") else "empty database")
     if p.get("vacuum_first"):
         parts.append("vacuumed first")
     if p.get("without_new_indexes"):
         parts.append("new indexes dropped")
+    if p.get("clients", 1) > 1:
+        parts.append(f"{p['clients']} clients")
+    claiming = (environment or {}).get("application_settings", {}).get("FAIR_CLAIMING")
+    if claiming is not None:
+        parts.append(
+            "fair claiming on" if claiming == "true" else "fair claiming OFF (oldest first)"
+        )
     return ", ".join(parts)
 
 
@@ -103,7 +110,7 @@ def drain() -> None:
         wk = cont.get("worker", {}).get("cpu_percent_mean_per_container")
         p = r["parameters"]
         print(
-            f"| {r['label']} | {p['workers']} | {p['kind']} | {setup(p)} | {len(runs)} | {spread(rates)} "
+            f"| {r['label']} | {p['workers']} | {p['kind']} | {setup(p, r.get('environment'))} | {len(runs)} | {spread(rates)} "
             f"| {spread_share} | {errs} / {extra} | {f(db, 0)} / {f(wk, 0)} |"
         )
 
@@ -121,15 +128,45 @@ def idle() -> None:
 
 
 def fairness() -> None:
-    for r in load("fairness"):
-        section("Fairness: client B's wait with and without client A's backlog")
-        print("| Case | Jobs queued when B started | B queue wait p50 (s) | p95 | max |")
-        print("|---|---|---|---|---|")
+    rows = load("fairness")
+    if not rows:
+        return
+    section("Fairness: client B's wait with and without client A's backlog")
+    print("| Run | Case | Jobs queued when B started | B queue wait p50 (s) | p95 | max |")
+    print("|---|---|---|---|---|---|")
+    for r in rows:
+        claiming = r.get("environment", {}).get("application_settings", {}).get("FAIR_CLAIMING")
+        tag = r["label"] or "(first run, before fair claiming existed)"
+        if claiming is not None and "fair" not in tag:
+            tag += ", fair claiming on" if claiming == "true" else ", fair claiming OFF"
         for case, res in r["results"].items():
             w = res["b"]["queue_wait_seconds"]
             print(
-                f"| {case} | {res['queued_jobs_when_b_started']} | {f(w['p50'])} | {f(w['p95'])} "
-                f"| {f(w['max'])} |"
+                f"| {tag} | {case} | {res['queued_jobs_when_b_started']} | {f(w['p50'])} "
+                f"| {f(w['p95'])} | {f(w['max'])} |"
+            )
+
+
+def claimcost() -> None:
+    for r in load("claimcost"):
+        section(
+            "What picking the next job costs: oldest-first vs fair, by number of waiting clients"
+        )
+        print("Median of 5 runs of EXPLAIN (ANALYZE), milliseconds. 50 queued jobs per client.\n")
+        print(
+            "| Clients with waiting jobs | Oldest first | Fair pick (compares up to 64 clients) | Fair pick (compares up to 1,000) |"
+        )
+        print("|---|---|---|---|")
+        by_clients: dict[int, dict[str, float]] = {}
+        for res in r["results"]:
+            runs = [x for x in res["ms_each_run"] if x is not None]
+            by_clients.setdefault(res["clients_with_queued_jobs"], {})[res["query"]] = (
+                statistics.median(runs)
+            )
+        for k, q in sorted(by_clients.items()):
+            print(
+                f"| {k} | {q['oldest_first']:.2f} ms | {q['fair_pick_max64']:.2f} ms "
+                f"| {q['fair_pick_max1000']:.2f} ms |"
             )
 
 
@@ -270,7 +307,7 @@ def history() -> None:
 
 
 def main() -> None:
-    for fn in (submit_only, drain, idle, fairness, overload, steady, soak, history):
+    for fn in (submit_only, drain, idle, fairness, claimcost, overload, steady, soak, history):
         fn()
 
 
