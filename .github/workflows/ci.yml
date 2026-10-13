@@ -40,7 +40,7 @@ jobs:
       REQUIRE_BACKUP_TOOLS: "1"
     steps:
       # Actions are pinned to a commit (the tag in the comment), so a moved tag cannot change CI.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
       - name: PostgreSQL client tools (the backup scripts and their tests need pg_dump and pg_restore)
         run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
@@ -78,7 +78,7 @@ jobs:
   image-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the image
         run: docker build -t queueforge:ci .
       - name: Scan the image
