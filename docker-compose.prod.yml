@@ -1,0 +1,76 @@
+# Production-style settings, layered on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile proxy up -d   # + HTTPS
+#
+# What it changes (see docs/deployment.md):
+#   - ENVIRONMENT=production: API docs hidden, weak database passwords rejected at startup
+#   - no ports published for the database, Redis or API (only the optional proxy listens)
+#   - Redis requires a password (REDIS_PASSWORD in your .env)
+#   - containers run with a read-only filesystem, no Linux capabilities, no privilege escalation
+#   - an optional Caddy proxy terminates HTTPS (profile `proxy`; see deploy/Caddyfile)
+#
+# Required in .env: strong POSTGRES_PASSWORD, REDIS_PASSWORD, and for the proxy QUEUEFORGE_DOMAIN.
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp"]
+
+services:
+  db:
+    ports: !reset []
+    security_opt: ["no-new-privileges:true"]
+
+  redis:
+    ports: !reset []
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    # The password reaches Redis through the environment, not the command line.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    security_opt: ["no-new-privileges:true"]
+
+  migrate:
+    <<: *hardening
+    environment:
+      ENVIRONMENT: production
+
+  api:
+    <<: *hardening
+    ports: !reset []
+    environment:
+      ENVIRONMENT: production
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+
+  worker:
+    <<: *hardening
+    environment:
+      ENVIRONMENT: production
+
+  maintenance:
+    <<: *hardening
+    environment:
+      ENVIRONMENT: production
+
+  # HTTPS in front of the API. Not started unless you ask for the `proxy` profile.
+  proxy:
+    profiles: ["proxy"]
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      QUEUEFORGE_DOMAIN: ${QUEUEFORGE_DOMAIN:?set QUEUEFORGE_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  caddy_data:
