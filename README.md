@@ -20,9 +20,9 @@ flowchart LR
     C[Client] -->|POST /v1/jobs + API key| A[API<br/>FastAPI]
     A -->|rate limit counters| R[(Redis)]
     A -->|save job, then 201| P[(PostgreSQL<br/>source of truth)]
-    W[Workers<br/>N processes] -->|claim: FOR UPDATE SKIP LOCKED<br/>lease + heartbeat| P
+    W[Workers<br/>N processes] -->|claim with lease| P
     W -->|fenced result write| P
-    M[Maintenance] -->|delete old finished jobs<br/>in small batches| P
+    M[Maintenance] -->|delete old jobs| P
     B[Backup scripts] -->|pg_dump + verify drill| P
     A -->|/metrics, /readyz| O[Operators]
 ```
