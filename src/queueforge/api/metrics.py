@@ -1,10 +1,20 @@
-"""Prometheus metrics, computed from the database each time /metrics is scraped.
+"""Prometheus metrics, computed from the database when /metrics is scraped.
 
 Workers are separate processes, so instead of each exposing its own numbers we read
 the truth straight from PostgreSQL. That also means the figures survive restarts.
+
+Cost: two of the queries (jobs by status, attempts by outcome) scan whole tables. With
+1,000,000 finished jobs a scrape took 1-4 s (docs/benchmarking.md). So the result is reused
+for `metrics_cache_seconds` (default 10): however often it is scraped, the database does
+this work at most once per interval per API process. The figures can therefore be up to
+that many seconds old. Retention (planned) will keep the tables small enough to avoid
+needing the cache at all.
 """
 
+import threading
+import time
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest
@@ -18,11 +28,24 @@ from queueforge.worker.presence import PRESENCE_STALE_SECONDS
 router = APIRouter(tags=["metrics"])
 
 
-class DatabaseCollector:
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+@dataclass(frozen=True)
+class Reading:
+    by_status: dict[str, int]
+    oldest_queued: float
+    oldest_running: float
+    expired: int
+    workers_alive: int
+    by_outcome: dict[str, int]
 
-    def collect(self) -> Iterable[Metric]:
+
+class DatabaseCollector:
+    def __init__(self, engine: Engine, cache_seconds: float = 0.0) -> None:
+        self._engine = engine
+        self._cache_seconds = cache_seconds
+        self._lock = threading.Lock()
+        self._cached: tuple[float, Reading] | None = None
+
+    def _read(self) -> Reading:
         with self._engine.connect() as conn:
             by_status: dict[str, int] = {
                 row[0]: row[1]
@@ -60,46 +83,66 @@ class DatabaseCollector:
                     text("SELECT outcome, count(*) FROM job_attempts GROUP BY outcome")
                 )
             }
+        return Reading(
+            by_status,
+            float(oldest_queued),
+            float(oldest_running),
+            expired,
+            workers_alive,
+            by_outcome,
+        )
+
+    def _reading(self) -> Reading:
+        if self._cache_seconds <= 0:
+            return self._read()
+        with self._lock:  # one refresh at a time; concurrent scrapes wait and then share it
+            now = time.monotonic()
+            if self._cached is None or now - self._cached[0] >= self._cache_seconds:
+                self._cached = (now, self._read())
+            return self._cached[1]
+
+    def collect(self) -> Iterable[Metric]:
+        r = self._reading()
 
         jobs = GaugeMetricFamily(
             "queueforge_jobs", "Jobs currently in each status", labels=["status"]
         )
         for s in JobStatus:
-            jobs.add_metric([s.value], float(by_status.get(s.value, 0)))
+            jobs.add_metric([s.value], float(r.by_status.get(s.value, 0)))
         yield jobs
 
         yield GaugeMetricFamily(
             "queueforge_oldest_queued_job_age_seconds",
             "Age of the oldest job that is ready to run but not yet claimed (queue lag)",
-            value=float(oldest_queued),
+            value=r.oldest_queued,
         )
         yield GaugeMetricFamily(
             "queueforge_oldest_running_job_age_seconds",
             "How long the longest-running current attempt has been going",
-            value=float(oldest_running),
+            value=r.oldest_running,
         )
         yield GaugeMetricFamily(
             "queueforge_expired_leases",
             "Running jobs whose lease has expired and not yet been swept (workers may be down)",
-            value=float(expired),
+            value=float(r.expired),
         )
         yield GaugeMetricFamily(
             "queueforge_workers_alive",
             "Worker processes seen in the last 30 seconds. ALERT when this is 0: nothing is "
             "running jobs or recovering crashed ones",
-            value=float(workers_alive),
+            value=float(r.workers_alive),
         )
         attempts = CounterMetricFamily(
             "queueforge_job_attempts", "Finished attempts by outcome", labels=["outcome"]
         )
         for o in AttemptOutcome:
-            attempts.add_metric([o.value], float(by_outcome.get(o.value, 0)))
+            attempts.add_metric([o.value], float(r.by_outcome.get(o.value, 0)))
         yield attempts
 
 
-def make_registry(engine: Engine) -> CollectorRegistry:
+def make_registry(engine: Engine, cache_seconds: float = 0.0) -> CollectorRegistry:
     registry = CollectorRegistry()
-    registry.register(DatabaseCollector(engine))
+    registry.register(DatabaseCollector(engine, cache_seconds))
     return registry
 
 

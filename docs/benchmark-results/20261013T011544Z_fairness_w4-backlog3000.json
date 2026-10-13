@@ -1,0 +1,120 @@
+{
+  "scenario": "fairness",
+  "label": "w4-backlog3000",
+  "environment": {
+    "date": "2026-10-13T01:15:53+00:00",
+    "git_commit": "06c3046",
+    "git_dirty": true,
+    "host": {
+      "os": "Windows-10-10.0.19045-SP0",
+      "python": "3.12.15",
+      "cpu": "Intel(R) Core(TM) i5-3210M CPU @ 2.50GHz (2 cores, 4 threads)",
+      "ram_gb": "7.9"
+    },
+    "docker": "ncpu=4 memory_bytes=4042534912 server=29.8.2",
+    "postgres_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "postgres_settings": {
+      "shared_buffers": "128MB",
+      "work_mem": "4MB",
+      "max_connections": "100",
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "random_page_cost": "4",
+      "effective_cache_size": "4GB"
+    },
+    "application_settings": {
+      "RATE_LIMIT_PER_MINUTE": "100000000",
+      "MAX_QUEUED_JOBS_PER_CLIENT": "10000",
+      "MAX_QUEUED_JOBS_TOTAL": "100000",
+      "MAX_REQUEST_BODY_BYTES": "65536",
+      "WORKER_LEASE_SECONDS": "30",
+      "WORKER_HEARTBEAT_INTERVAL_SECONDS": "10",
+      "WORKER_SWEEP_INTERVAL_SECONDS": "10",
+      "WORKER_SHUTDOWN_DRAIN_SECONDS": "25",
+      "RETRY_BASE_DELAY_SECONDS": "2",
+      "RETRY_MAX_DELAY_SECONDS": "300",
+      "LOG_LEVEL": "INFO",
+      "ENVIRONMENT": "development"
+    },
+    "api_url": "http://127.0.0.1:18000"
+  },
+  "parameters": {
+    "command": "fairness",
+    "label": "w4-backlog3000",
+    "workers": 4,
+    "backlog": 3000,
+    "b_jobs": 20,
+    "concurrency": 16,
+    "drain_timeout": 600.0,
+    "fn": "<function scenario_fairness at 0x000001E13DEB0220>"
+  },
+  "results": {
+    "baseline_b_alone": {
+      "backlog_inserted_for_a": 0,
+      "queued_jobs_when_b_started": 0,
+      "b": {
+        "jobs": 20,
+        "succeeded": 20,
+        "failed": 0,
+        "dead_lettered": 0,
+        "unfinished": 0,
+        "extra_attempts": 0,
+        "error_rate": 0.0,
+        "completion_window_seconds": 10.263587,
+        "completion_per_second": 1.9486364757272483,
+        "queue_wait_seconds": {
+          "p50": 0.192141,
+          "p95": 0.53599255,
+          "p99": 0.57451771,
+          "max": "0.584149"
+        },
+        "run_seconds": {
+          "p50": 0.023,
+          "p95": 0.0431,
+          "p99": 0.04461999999999999,
+          "max": null
+        },
+        "end_to_end_seconds": {
+          "p50": 0.212645,
+          "p95": 0.5783151500000001,
+          "p99": 0.6007222299999999,
+          "max": "0.606324"
+        }
+      }
+    },
+    "b_behind_a_backlog": {
+      "backlog_inserted_for_a": 3000,
+      "queued_jobs_when_b_started": 3000,
+      "b": {
+        "jobs": 20,
+        "succeeded": 20,
+        "failed": 0,
+        "dead_lettered": 0,
+        "unfinished": 0,
+        "extra_attempts": 0,
+        "error_rate": 0.0,
+        "completion_window_seconds": 121.037051,
+        "completion_per_second": 0.16523865902846557,
+        "queue_wait_seconds": {
+          "p50": 115.89764550000001,
+          "p95": 120.32889375,
+          "p99": 120.73226755,
+          "max": "120.833111"
+        },
+        "run_seconds": {
+          "p50": 0.017,
+          "p95": 0.021,
+          "p99": 0.021,
+          "max": null
+        },
+        "end_to_end_seconds": {
+          "p50": 115.91340650000001,
+          "p95": 120.3391475,
+          "p99": 120.7429583,
+          "max": "120.843911"
+        }
+      }
+    }
+  }
+}

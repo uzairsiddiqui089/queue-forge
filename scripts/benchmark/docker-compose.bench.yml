@@ -1,0 +1,17 @@
+# Benchmark overrides. Used together with the main compose file, under its OWN project name
+# ("-p qfbench"), so it has its own database volume and never touches development data.
+# Different host ports let it run next to the dev stack (but stop the dev stack while
+# benchmarking: they would compete for CPU and distort the numbers).
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:15432:5432"
+  redis:
+    ports: !override
+      - "127.0.0.1:16379:6379"
+  api:
+    ports: !override
+      - "127.0.0.1:18000:8000"
+    environment:
+      # Set BENCH_REDIS_URL to an empty string to run WITHOUT the rate limiter.
+      REDIS_URL: ${BENCH_REDIS_URL-redis://redis:6379/0}

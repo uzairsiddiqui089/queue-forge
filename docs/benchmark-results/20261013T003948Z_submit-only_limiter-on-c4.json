@@ -1,0 +1,74 @@
+{
+  "scenario": "submit-only",
+  "label": "limiter-on-c4",
+  "environment": {
+    "date": "2026-10-13T00:39:51+00:00",
+    "git_commit": "06c3046",
+    "git_dirty": true,
+    "host": {
+      "os": "Windows-10-10.0.19045-SP0",
+      "python": "3.12.15",
+      "cpu": "Intel(R) Core(TM) i5-3210M CPU @ 2.50GHz (2 cores, 4 threads)",
+      "ram_gb": "7.9"
+    },
+    "docker": "ncpu=4 memory_bytes=4042534912 server=29.8.2",
+    "postgres_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "postgres_settings": {
+      "shared_buffers": "128MB",
+      "work_mem": "4MB",
+      "max_connections": "100",
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "random_page_cost": "4",
+      "effective_cache_size": "4GB"
+    },
+    "application_settings": {
+      "RATE_LIMIT_PER_MINUTE": "100000000",
+      "MAX_QUEUED_JOBS_PER_CLIENT": "10000",
+      "MAX_QUEUED_JOBS_TOTAL": "100000",
+      "MAX_REQUEST_BODY_BYTES": "65536",
+      "WORKER_LEASE_SECONDS": "30",
+      "WORKER_HEARTBEAT_INTERVAL_SECONDS": "10",
+      "WORKER_SWEEP_INTERVAL_SECONDS": "10",
+      "WORKER_SHUTDOWN_DRAIN_SECONDS": "25",
+      "RETRY_BASE_DELAY_SECONDS": "2",
+      "RETRY_MAX_DELAY_SECONDS": "300",
+      "LOG_LEVEL": "INFO",
+      "ENVIRONMENT": "development"
+    },
+    "api_url": "http://127.0.0.1:18000"
+  },
+  "parameters": {
+    "command": "submit-only",
+    "label": "limiter-on-c4",
+    "jobs": 500,
+    "concurrency": 4,
+    "fn": "<function scenario_submit_only at 0x000001EDF5638180>"
+  },
+  "submit": {
+    "requests": 500,
+    "status_counts": {
+      "201": 500
+    },
+    "accepted": 500,
+    "window_seconds": 9.66122555732727,
+    "accepted_per_second": 51.75326846817998,
+    "latency_seconds_accepted": {
+      "n": 500,
+      "p50": 0.07408825000129582,
+      "p95": 0.11202671499977442,
+      "p99": 0.13917228899925244,
+      "max": 0.1997657000028994,
+      "mean": 0.077161936000055
+    },
+    "latency_seconds_all": {
+      "n": 500,
+      "p50": 0.07408825000129582,
+      "p95": 0.11202671499977442,
+      "p99": 0.13917228899925244,
+      "max": 0.1997657000028994,
+      "mean": 0.077161936000055
+    }
+  }
+}

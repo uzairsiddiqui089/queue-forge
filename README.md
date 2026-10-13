@@ -16,6 +16,7 @@ focuses on correct, explainable backend engineering.
 
 ## Implemented
 
+- A repeatable benchmark harness (`scripts/benchmark/`) with measured results and findings in [docs/benchmarking.md](docs/benchmarking.md)
 - Structured JSON logs with a field allow-list (payloads, keys and query strings are never logged; tested)
 - `GET /metrics` (Prometheus format, admin key): jobs per state, oldest queued job age, expired leases, attempts by outcome
 - Admin endpoints: list dead-lettered jobs, view a job's attempt history, re-queue a dead-lettered job
@@ -124,7 +125,8 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 - No endpoint to create API clients; use the script above. No key rotation or expiry.
 - Job payloads are stored unencrypted. No cleanup of old jobs or keys. See [security](docs/security.md).
 - The Compose file is for local development only (ports bound to localhost, no TLS, no Redis password).
-- No performance numbers yet: benchmarks are planned (Milestone 6).
+- Performance figures exist but come from **one low-end laptop** and are not capacity numbers; see [docs/benchmarking.md](docs/benchmarking.md) for what was measured, what was found and fixed, and the limits. Not yet validated in any production-like environment.
+- **No fairness between clients:** claiming is oldest-first overall, so one client's large backlog delays everyone else (measured: 116 s vs 0.19 s). A fix is designed but not built.
 
 ## License
 

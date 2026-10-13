@@ -29,6 +29,7 @@ def create_app(
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
     queue_limits: QueueLimits | None = None,
     docs_enabled: bool = True,
+    metrics_cache_seconds: float = 0.0,
 ) -> FastAPI:
     """Build the app. With no arguments it configures itself from the environment."""
     if engine is None:
@@ -37,9 +38,12 @@ def create_app(
         engine = engine_from_settings(settings)
         max_body_bytes = settings.max_request_body_bytes
         queue_limits = QueueLimits(
-            per_client=settings.max_queued_jobs_per_client, total=settings.max_queued_jobs_total
+            per_client=settings.max_queued_jobs_per_client,
+            total=settings.max_queued_jobs_total,
+            global_check_cache_seconds=settings.queue_depth_cache_seconds,
         )
         docs_enabled = settings.environment != "production"  # no public API docs in production
+        metrics_cache_seconds = settings.metrics_cache_seconds
         if rate_limiter is None and settings.redis_url:
             rate_limiter = RedisRateLimiter.from_url(
                 settings.redis_url, settings.rate_limit_per_minute
@@ -58,7 +62,7 @@ def create_app(
     app.state.session_factory = sessionmaker(engine, expire_on_commit=False)
     app.state.rate_limiter = rate_limiter
     app.state.queue_limits = queue_limits if queue_limits is not None else QueueLimits()
-    app.state.metrics_registry = metrics.make_registry(engine)
+    app.state.metrics_registry = metrics.make_registry(engine, metrics_cache_seconds)
 
     # The last middleware added is the outermost. The size limit is inside the request
     # logger, so rejected (413) requests are logged too.

@@ -1,0 +1,325 @@
+ Image qfbench-api Building 
+ Image qfbench-worker Building 
+ Image qfbench-migrate Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.36kB done
+#1 DONE 0.0s
+
+#2 [worker internal] load build definition from Dockerfile
+#2 transferring dockerfile: 757B 0.1s done
+#2 transferring dockerfile: 757B 0.1s done
+#2 DONE 0.1s
+
+#3 [migrate internal] load metadata for docker.io/library/python:3.12-slim
+#3 ...
+
+#4 [worker internal] load metadata for ghcr.io/astral-sh/uv:0.13.0
+#4 DONE 4.6s
+
+#3 [worker internal] load metadata for docker.io/library/python:3.12-slim
+#3 DONE 5.0s
+
+#5 [worker internal] load .dockerignore
+#5 transferring context: 146B 0.0s done
+#5 DONE 0.0s
+
+#6 [worker internal] load build context
+#6 DONE 0.0s
+
+#7 [worker] FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168
+#7 resolve ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 0.1s done
+#7 resolve ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 0.1s done
+#7 DONE 0.1s
+
+#8 [migrate stage-0  1/10] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#8 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.1s done
+#8 DONE 0.1s
+
+#6 [api internal] load build context
+#6 transferring context: 35.23kB 0.1s done
+#6 DONE 0.1s
+
+#9 [worker stage-0  2/10] COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /usr/local/bin/uv
+#9 CACHED
+
+#10 [worker stage-0  3/10] WORKDIR /app
+#10 CACHED
+
+#11 [worker stage-0  4/10] COPY pyproject.toml uv.lock README.md LICENSE ./
+#11 DONE 0.1s
+
+#12 [migrate stage-0  5/10] RUN uv sync --frozen --no-dev --no-install-project
+#12 2.653 Using CPython 3.12.15 interpreter at: /usr/local/bin/python3
+#12 2.660 Creating virtual environment at: .venv
+#12 4.386 Downloading sqlalchemy (4.5MiB)
+#12 4.390 Downloading uvloop (4.3MiB)
+#12 4.407 Downloading pydantic-core (2.1MiB)
+#12 4.414 Downloading psycopg-binary (5.0MiB)
+#12 519.6  Downloaded pydantic-core
+#12 856.8  Downloaded uvloop
+#12 874.7  Downloaded sqlalchemy
+#12 895.0  Downloaded psycopg-binary
+#12 895.0 Prepared 29 packages in 14m 52s
+#12 897.5 Installed 29 packages in 2.51s
+#12 901.9 Bytecode compiled 1085 files in 4.46s
+#12 901.9  + alembic==1.20.0
+#12 901.9  + annotated-doc==0.0.5
+#12 901.9  + annotated-types==0.8.0
+#12 901.9  + anyio==4.15.1
+#12 901.9  + click==8.5.0
+#12 901.9  + fastapi==0.143.0
+#12 901.9  + h11==0.16.0
+#12 901.9  + httptools==0.9.0
+#12 901.9  + idna==3.20
+#12 901.9  + mako==1.4.3
+#12 901.9  + markupsafe==3.0.4
+#12 901.9  + opentelemetry-api==1.45.1
+#12 901.9  + prometheus-client==0.26.0
+#12 901.9  + psycopg==3.3.6
+#12 901.9  + psycopg-binary==3.3.6
+#12 901.9  + pydantic==2.14.1
+#12 901.9  + pydantic-core==2.50.1
+#12 901.9  + pydantic-settings==2.15.0
+#12 902.0  + python-dotenv==1.2.4
+#12 902.0  + pyyaml==6.0.3
+#12 902.0  + redis==8.1.0
+#12 902.0  + sqlalchemy==2.1.4
+#12 902.0  + starlette==1.7.0
+#12 902.0  + typing-extensions==4.16.0
+#12 902.0  + typing-inspection==0.4.4
+#12 902.0  + uvicorn==0.54.0
+#12 902.0  + uvloop==0.23.0
+#12 902.0  + watchfiles==1.3.0
+#12 902.0  + websockets==17.2
+#12 DONE 902.2s
+
+#13 [api stage-0  6/10] COPY src ./src
+#13 DONE 0.8s
+
+#14 [worker stage-0  7/10] COPY alembic.ini ./
+#14 DONE 0.1s
+
+#15 [worker stage-0  8/10] COPY migrations ./migrations
+#15 DONE 0.1s
+
+#16 [api stage-0  9/10] RUN uv sync --frozen --no-dev
+#16 0.433    Building queueforge @ file:///app
+#16 10.41       Built queueforge @ file:///app
+#16 10.43 Prepared 1 package in 10.01s
+#16 10.44 Installed 1 package in 14ms
+#16 11.77 Bytecode compiled 1085 files in 1.32s
+#16 11.77  + queueforge==0.1.0 (from file:///app)
+#16 DONE 12.3s
+
+#17 [api stage-0 10/10] RUN useradd --system --no-create-home appuser
+#17 DONE 3.5s
+
+#18 [api] exporting to image
+#18 exporting layers
+#18 ...
+
+#19 [worker] exporting to image
+#19 ...
+
+#20 [migrate] exporting to image
+#20 exporting layers 19.1s done
+#20 exporting manifest sha256:179efe935e00b3c5bff9664c5f346b590cceffc51e2c43a62b8d05ff94f96370
+#20 ...
+
+#18 [api] exporting to image
+#18 exporting layers 19.0s done
+#18 exporting manifest sha256:32c512d32e234c265476d8a3d8b397a82b4e07fe428c361e18484466148deb5b 0.1s done
+#18 exporting config sha256:ac2c7c31d0cfb00e7feab25b79ccac2b2bd7dc89cfba6379e137976aa9a90a5d
+#18 exporting config sha256:ac2c7c31d0cfb00e7feab25b79ccac2b2bd7dc89cfba6379e137976aa9a90a5d 0.3s done
+#18 exporting attestation manifest sha256:3ef4a71cf506f93e5097e8c9cc85eb2e943edc515f70e1a3fb84af469b37888b
+#18 exporting attestation manifest sha256:3ef4a71cf506f93e5097e8c9cc85eb2e943edc515f70e1a3fb84af469b37888b 0.1s done
+#18 exporting manifest list sha256:4b0ff93141b458b13d199f9066205015a51840a69c62ce4294ccc69382da3f02
+#18 exporting manifest list sha256:4b0ff93141b458b13d199f9066205015a51840a69c62ce4294ccc69382da3f02 0.1s done
+#18 naming to docker.io/library/qfbench-api:latest 0.0s done
+#18 unpacking to docker.io/library/qfbench-api:latest
+#18 ...
+
+#19 [worker] exporting to image
+#19 exporting layers 19.1s done
+#19 exporting manifest sha256:2f4a6c24d27c3eb9177cb27c6c78b69d160a4c2dac83e125c7bc76f1986bc909 0.1s done
+#19 exporting config sha256:36d793e821f5c73e59c95f52988df35f8683709361e05a65c0281eff2a12b2a8 0.3s done
+#19 exporting attestation manifest sha256:52ee80eb868606bfecedb4faa6ba93b20ac721c8193d7d1370df824a7c60e0aa 0.1s done
+#19 exporting manifest list sha256:435bf6a0309b2de88c54c8c8cb4c5e1621b13084a138d58fa9a8cecad096ff16 0.1s done
+#19 naming to docker.io/library/qfbench-worker:latest 0.0s done
+#19 unpacking to docker.io/library/qfbench-worker:latest
+#19 ...
+
+#20 [migrate] exporting to image
+#20 exporting manifest sha256:179efe935e00b3c5bff9664c5f346b590cceffc51e2c43a62b8d05ff94f96370 0.4s done
+#20 exporting config sha256:5667663278d4756397ab866b444bd7f88d864e9ec5b5cc1b245ce8a43ce5933f 0.1s done
+#20 exporting attestation manifest sha256:933cb46dde07298c8a49c3cf5795a9eaa4c8c895f163b1eb789a77e76d230ad0 0.1s done
+#20 exporting manifest list sha256:eea5abe0f6f062113cb2fd23db06fd93ab8c39ad4e788ed8683dffca307a3064 0.1s done
+#20 naming to docker.io/library/qfbench-migrate:latest 0.0s done
+#20 unpacking to docker.io/library/qfbench-migrate:latest
+#20 unpacking to docker.io/library/qfbench-migrate:latest 33.7s done
+#20 ...
+
+#19 [worker] exporting to image
+#19 unpacking to docker.io/library/qfbench-worker:latest 33.9s done
+#19 ...
+
+#20 [migrate] exporting to image
+#20 DONE 53.7s
+
+#19 [worker] exporting to image
+#19 DONE 53.8s
+
+#18 [api] exporting to image
+#18 unpacking to docker.io/library/qfbench-api:latest 34.0s done
+#18 DONE 54.1s
+
+#21 [migrate] resolving provenance for metadata file
+#21 ...
+
+#22 [worker] resolving provenance for metadata file
+#22 DONE 0.2s
+
+#23 [api] resolving provenance for metadata file
+#23 DONE 0.1s
+
+#21 [migrate] resolving provenance for metadata file
+#21 DONE 0.3s
+ Image qfbench-migrate Built 
+ Image qfbench-worker Built 
+ Image qfbench-api Built 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-migrate-1 Recreate 
+ Container qfbench-migrate-1 Recreated 
+ Container qfbench-api-1 Recreate 
+ Container qfbench-worker-4 Creating 
+ Container qfbench-worker-2 Creating 
+ Container qfbench-worker-3 Creating 
+ Container qfbench-worker-1 Creating 
+ Container qfbench-worker-4 Created 
+ Container qfbench-worker-3 Created 
+ Container qfbench-worker-2 Created 
+ Container qfbench-worker-1 Created 
+ Container qfbench-api-1 Recreated 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-1 Starting 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-worker-1 Started 
+ Container qfbench-worker-2 Starting 
+ Container qfbench-worker-2 Started 
+ Container qfbench-worker-3 Starting 
+ Container qfbench-api-1 Started 
+ Container qfbench-worker-3 Started 
+ Container qfbench-worker-4 Starting 
+ Container qfbench-worker-4 Started 
+benchmark stack is up with 4 worker(s) at http://127.0.0.1:18000
+### Query plans and timings with the indexes in place (1M history)
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-worker-3 Stopping 
+ Container qfbench-worker-1 Stopping 
+ Container qfbench-worker-2 Stopping 
+ Container qfbench-worker-4 Stopping 
+ Container qfbench-worker-4 Stopped 
+ Container qfbench-worker-4 Removing 
+ Container qfbench-worker-2 Stopped 
+ Container qfbench-worker-2 Removing 
+ Container qfbench-worker-1 Stopped 
+ Container qfbench-worker-1 Removing 
+ Container qfbench-worker-4 Removed 
+ Container qfbench-worker-3 Stopped 
+ Container qfbench-worker-3 Removing 
+ Container qfbench-worker-2 Removed 
+ Container qfbench-worker-1 Removed 
+ Container qfbench-worker-3 Removed 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+current schema:
+  claim_next_job: [1.58, 0.58, 0.54] ms  <- Limit  (cost=1.26..2.16 rows=1 width=38) (actual time=0.482..0.484 row
+  sweeper_find_expired: [0.23, 0.39, 0.37] ms  <- Limit  (cost=0.27..8.30 rows=1 width=38) (actual time=0.040..0.170 row
+  per_client_queue_count: [9.42, 10.11, 9.66] ms  <- Aggregate  (cost=53.08..53.09 rows=1 width=8) (actual time=9.369..9.37
+  global_queue_count: [76.02, 15.29, 10.39] ms  <- Aggregate  (cost=2161.91..2161.92 rows=1 width=8) (actual time=10.357.
+  dead_letter_listing: [0.61, 0.12, 0.11] ms  <- Limit  (cost=0.29..78.45 rows=50 width=223) (actual time=0.021..0.087 
+  metrics_jobs_by_status: [258.11, 340.78, 346.47] ms  <- Finalize GroupAggregate  (cost=33305.54..33306.55 rows=4 width=17) (ac
+  metrics_oldest_queued: [0.33, 0.46, 0.38] ms  <- Result  (cost=0.65..0.67 rows=1 width=32) (actual time=0.248..0.249 ro
+  metrics_oldest_running: [542.57, 0.57, 0.29] ms  <- Aggregate  (cost=597.23..597.25 rows=1 width=32) (actual time=0.251..0
+  metrics_expired_leases: [0.11, 0.08, 0.08] ms  <- Aggregate  (cost=8.29..8.30 rows=1 width=8) (actual time=0.047..0.048 
+  metrics_attempts_by_outcome: [1691.23, 284.6, 315.04] ms  <- Finalize GroupAggregate  (cost=19868.45..19868.70 rows=1 width=18) (ac
+  get_job_by_id: [0.06, 0.07, 0.11] ms  <- Index Scan using jobs_pkey on jobs  (cost=0.42..8.44 rows=1 width=223)
+  attempt_history_for_job: [0.24, 0.08, 0.07] ms  <- Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.
+with candidate indexes (created in a transaction, rolled back afterwards):
+  claim_next_job: [0.35, 0.36, 0.44] ms  <- Limit  (cost=1.25..2.14 rows=1 width=38) (actual time=0.319..0.320 row
+  sweeper_find_expired: [0.18, 0.2, 0.14] ms  <- Limit  (cost=0.15..8.18 rows=1 width=38) (actual time=0.037..0.110 row
+  per_client_queue_count: [5.24, 5.15, 5.21] ms  <- Aggregate  (cost=51.75..51.76 rows=1 width=8) (actual time=5.112..5.11
+  global_queue_count: [11.74, 11.55, 11.44] ms  <- Aggregate  (cost=2131.94..2131.95 rows=1 width=8) (actual time=11.407.
+  dead_letter_listing: [0.13, 0.12, 0.16] ms  <- Limit  (cost=0.29..76.68 rows=50 width=224) (actual time=0.023..0.089 
+  metrics_jobs_by_status: [501.35, 1276.14, 1244.72] ms  <- Finalize GroupAggregate  (cost=33305.54..33306.55 rows=4 width=17) (ac
+  metrics_oldest_queued: [0.53, 0.41, 0.32] ms  <- Result  (cost=0.65..0.67 rows=1 width=32) (actual time=0.282..0.283 ro
+  metrics_oldest_running: [0.53, 0.47, 0.43] ms  <- Aggregate  (cost=1163.07..1163.08 rows=1 width=32) (actual time=0.380.
+  metrics_expired_leases: [0.11, 0.12, 0.12] ms  <- Aggregate  (cost=8.17..8.18 rows=1 width=8) (actual time=0.071..0.072 
+  metrics_attempts_by_outcome: [1473.7, 834.0, 597.23] ms  <- Finalize GroupAggregate  (cost=19868.45..19868.70 rows=1 width=18) (ac
+  get_job_by_id: [0.08, 0.08, 0.08] ms  <- Index Scan using jobs_pkey on jobs  (cost=0.42..8.44 rows=1 width=224)
+  attempt_history_for_job: [0.08, 0.07, 0.07] ms  <- Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.
+  GET /metrics seconds: [0.934, 0.068, 0.058]
+saved docs\benchmark-results\20261013T021541Z_plans_1m-after-indexes.json
+### Drain capacity with 1M history, after the indexes (before: 57.7-61.3 jobs/s)
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-worker-4 Creating 
+ Container qfbench-worker-1 Creating 
+ Container qfbench-worker-2 Creating 
+ Container qfbench-worker-3 Creating 
+ Container qfbench-worker-3 Created 
+ Container qfbench-worker-4 Created 
+ Container qfbench-worker-2 Created 
+ Container qfbench-worker-1 Created 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-1 Starting 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-worker-1 Started 
+ Container qfbench-worker-3 Starting 
+ Container qfbench-worker-3 Started 
+ Container qfbench-worker-2 Starting 
+ Container qfbench-worker-2 Started 
+ Container qfbench-worker-4 Starting 
+ Container qfbench-worker-4 Started 
+Traceback (most recent call last):
+  File "<repo>\scripts\benchmark\bench.py", line 1095, in <module>
+    main()
+  File "<repo>\scripts\benchmark\bench.py", line 1091, in main
+    args.fn(args)
+  File "<repo>\scripts\benchmark\bench.py", line 661, in scenario_drain
+    reset_data(conn, args.keep_history)
+  File "<repo>\scripts\benchmark\bench.py", line 214, in reset_data
+    conn.execute(
+  File "<repo>\.venv\Lib\site-packages\psycopg\connection.py", line 304, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ForeignKeyViolation: update or delete on table "jobs" violates foreign key constraint "job_attempts_job_id_fkey" on table "job_attempts"
+DETAIL:  Key (id)=(2d7d0e46-b325-44af-8594-a1df56a5e8e5) is still referenced from table "job_attempts".

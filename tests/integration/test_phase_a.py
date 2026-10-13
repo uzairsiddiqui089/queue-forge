@@ -461,3 +461,53 @@ def test_the_cap_lock_does_not_block_other_clients(
             job_service.submit_job(session, bob, "echo", {"message": "x"}, None, limits)
         assert time.monotonic() - started < 1.0
         holding.rollback()
+
+
+def test_global_cap_check_can_reuse_a_recent_answer(
+    engine: Engine, make_client: MakeClient
+) -> None:
+    """With the short cache on, a full queue is still refused (after the cache catches up)."""
+    import queueforge.services.jobs as jobs_module
+
+    jobs_module._global_full_cache = (0.0, False)
+    limits = QueueLimits(per_client=100, total=2, global_check_cache_seconds=0.4)
+    client = make_client("alice")[0]
+    sessions = sessionmaker(engine, expire_on_commit=False)
+
+    def attempt() -> bool:
+        with sessions() as session:
+            try:
+                job_service.submit_job(session, client, "echo", {"message": "x"}, None, limits)
+            except job_service.QueueFull:
+                return False
+            return True
+
+    assert attempt() and attempt()  # the cache says "not full" and both are accepted
+    time.sleep(0.5)  # the cached answer expires...
+    assert attempt() is False  # ...the queue is counted again and found full
+    jobs_module._global_full_cache = (0.0, False)
+
+
+def test_a_full_queue_is_refused_without_waiting_for_the_client_lock(
+    engine: Engine, sessions: sessionmaker[Session], make_client: MakeClient
+) -> None:
+    """The global check is done before taking the client's lock (the lock was being held
+    during a slow count, which made concurrent submits from one client time out)."""
+    import queueforge.services.jobs as jobs_module
+
+    jobs_module._global_full_cache = (0.0, False)
+    alice, bob = make_client("alice")[0], make_client("bob")[0]
+    limits = QueueLimits(per_client=100, total=1)
+    with sessions() as session:  # the queue is now at its (tiny) global cap
+        job_service.submit_job(session, bob, "echo", {"message": "x"}, None)
+    with sessions() as holding:  # someone else holds alice's per-client lock
+        holding.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"queue-cap:{alice}"},
+        )
+        started = time.monotonic()
+        with sessions() as session, pytest.raises(job_service.QueueFull) as refused:
+            job_service.submit_job(session, alice, "echo", {"message": "y"}, None, limits)
+        assert refused.value.scope == "global"
+        assert time.monotonic() - started < 1.0  # refused at once, not after waiting for the lock
+        holding.rollback()

@@ -7,6 +7,7 @@ so a client never holds a job ID for a job that was not saved.
 
 import hashlib
 import json
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
@@ -33,6 +34,14 @@ class QueueLimits:
     per_client: int = 10_000
     total: int = 100_000
     retry_after_seconds: int = 30
+    # How long the answer to "is the whole queue full?" may be reused (seconds). Counting a
+    # deep queue on every submit cost 44-99 ms at 100,000 queued jobs (docs/benchmarking.md).
+    # The global cap is already a soft limit, so a short staleness is acceptable. 0 = always
+    # count (exact for a single process; used by the tests).
+    global_check_cache_seconds: float = 0.0
+
+
+_global_full_cache: tuple[float, bool] = (0.0, False)  # (time checked, was the queue full)
 
 
 class QueueFull(Exception):
@@ -42,6 +51,21 @@ class QueueFull(Exception):
         super().__init__(scope)
         self.scope = scope
         self.retry_after_seconds = retry_after_seconds
+
+
+def _global_queue_full(session: Session, limits: QueueLimits) -> bool:
+    """Is the whole queue at its cap? The answer may be reused for a short time (see
+    QueueLimits.global_check_cache_seconds). A benign race: two threads may both recount."""
+    global _global_full_cache
+    ttl = limits.global_check_cache_seconds
+    if ttl > 0:
+        checked_at, was_full = _global_full_cache
+        if time.monotonic() - checked_at < ttl:
+            return was_full
+    full = _queued_at_least(session, limits.total, None)
+    if ttl > 0:
+        _global_full_cache = (time.monotonic(), full)
+    return full
 
 
 def _queued_at_least(session: Session, limit: int, client_id: uuid.UUID | None) -> bool:
@@ -115,6 +139,13 @@ def submit_job(
         )
 
     if limits is not None:
+        # The global cap is a soft limit, so it is checked FIRST and without the lock below.
+        # (Counting a deep queue takes tens of milliseconds; doing it while holding the
+        # client's lock made that client's concurrent submits queue up behind each other and
+        # time out. Measured in docs/benchmarking.md.)
+        if _global_queue_full(session, limits):
+            session.rollback()
+            raise QueueFull("global", limits.retry_after_seconds)
         # Make the per-client cap exact. Without this, two simultaneous submits could both
         # see "499 of 500" and both insert. The lock is held until this transaction ends
         # (commit or rollback), so one client's check-and-insert steps run one at a time.
@@ -125,9 +156,6 @@ def submit_job(
         if _queued_at_least(session, limits.per_client, client_id):
             session.rollback()
             raise QueueFull("client", limits.retry_after_seconds)
-        if _queued_at_least(session, limits.total, None):
-            session.rollback()
-            raise QueueFull("global", limits.retry_after_seconds)
 
     job = Job(client_id=client_id, task_type=task_type, payload=payload)
     session.add(job)

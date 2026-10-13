@@ -1,0 +1,519 @@
+{
+  "scenario": "soak",
+  "label": "w4-15ps-10min",
+  "environment": {
+    "date": "2026-10-13T01:34:05+00:00",
+    "git_commit": "06c3046",
+    "git_dirty": true,
+    "host": {
+      "os": "Windows-10-10.0.19045-SP0",
+      "python": "3.12.15",
+      "cpu": "Intel(R) Core(TM) i5-3210M CPU @ 2.50GHz (2 cores, 4 threads)",
+      "ram_gb": "7.9"
+    },
+    "docker": "ncpu=4 memory_bytes=4042534912 server=29.8.2",
+    "postgres_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "postgres_settings": {
+      "shared_buffers": "128MB",
+      "work_mem": "4MB",
+      "max_connections": "100",
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "random_page_cost": "4",
+      "effective_cache_size": "4GB"
+    },
+    "application_settings": {
+      "RATE_LIMIT_PER_MINUTE": "100000000",
+      "MAX_QUEUED_JOBS_PER_CLIENT": "10000",
+      "MAX_QUEUED_JOBS_TOTAL": "100000",
+      "MAX_REQUEST_BODY_BYTES": "65536",
+      "WORKER_LEASE_SECONDS": "30",
+      "WORKER_HEARTBEAT_INTERVAL_SECONDS": "10",
+      "WORKER_SWEEP_INTERVAL_SECONDS": "10",
+      "WORKER_SHUTDOWN_DRAIN_SECONDS": "25",
+      "RETRY_BASE_DELAY_SECONDS": "2",
+      "RETRY_MAX_DELAY_SECONDS": "300",
+      "LOG_LEVEL": "INFO",
+      "ENVIRONMENT": "development"
+    },
+    "api_url": "http://127.0.0.1:18000"
+  },
+  "parameters": {
+    "command": "soak",
+    "label": "w4-15ps-10min",
+    "workers": 4,
+    "rate": 15.0,
+    "seconds": 600.0,
+    "concurrency": 32,
+    "sample_seconds": 30,
+    "drain_timeout": 300.0,
+    "fn": "<function scenario_soak at 0x000001E7FAD28540>"
+  },
+  "run": {
+    "submit": {
+      "requests": 9000,
+      "status_counts": {
+        "201": 8997,
+        "-1": 3
+      },
+      "accepted": 8997,
+      "window_seconds": 600.0491917133331,
+      "accepted_per_second": 14.993770717881771,
+      "latency_seconds_accepted": {
+        "n": 8997,
+        "p50": 0.04217369999969378,
+        "p95": 1.3912927000004858,
+        "p99": 2.568433387998527,
+        "max": 3.7107356999986223,
+        "mean": 0.24615829925530552
+      },
+      "latency_seconds_all": {
+        "n": 9000,
+        "p50": 0.04216259999884642,
+        "p95": 1.3912693000007492,
+        "p99": 2.56822114699855,
+        "max": 3.7107356999986223,
+        "mean": 0.24608514532222034
+      }
+    },
+    "drained_within_timeout": true,
+    "jobs": {
+      "jobs": 8997,
+      "succeeded": 8997,
+      "failed": 0,
+      "dead_lettered": 0,
+      "unfinished": 0,
+      "extra_attempts": 0,
+      "error_rate": 0.0,
+      "completion_window_seconds": 600.255575,
+      "completion_per_second": 14.988615474333578,
+      "queue_wait_seconds": {
+        "p50": 0.259588,
+        "p95": 1.8546695999999934,
+        "p99": 2.7617857199999976,
+        "max": "3.922416"
+      },
+      "run_seconds": {
+        "p50": 0.166,
+        "p95": 0.29,
+        "p99": 0.37703999999999904,
+        "max": null
+      },
+      "end_to_end_seconds": {
+        "p50": 0.428398,
+        "p95": 2.0398899999999984,
+        "p99": 2.9316961999999918,
+        "max": "4.114801"
+      }
+    },
+    "containers": {
+      "worker": {
+        "samples": 984,
+        "cpu_percent_mean_per_container": 11.451900406504064,
+        "cpu_percent_max_per_container": 62.59,
+        "memory_mib_max_per_container": 55.02
+      },
+      "api": {
+        "samples": 246,
+        "cpu_percent_mean_per_container": 44.49565040650407,
+        "cpu_percent_max_per_container": 230.69,
+        "memory_mib_max_per_container": 92.16
+      },
+      "db": {
+        "samples": 246,
+        "cpu_percent_mean_per_container": 23.478089430894308,
+        "cpu_percent_max_per_container": 138.65,
+        "memory_mib_max_per_container": 119.0
+      },
+      "redis": {
+        "samples": 246,
+        "cpu_percent_mean_per_container": 3.1508536585365854,
+        "cpu_percent_max_per_container": 40.02,
+        "memory_mib_max_per_container": 16.27
+      }
+    }
+  },
+  "time_series": [
+    {
+      "elapsed_seconds": 30,
+      "completed_in_window": 446,
+      "queue_wait_p95_seconds_in_window": 0.7867535,
+      "queued_now": 3,
+      "tables": {
+        "jobs": {
+          "live_rows": 303,
+          "dead_rows": 620,
+          "total_bytes": 262144,
+          "table_bytes": 139264
+        },
+        "job_attempts": {
+          "live_rows": 310,
+          "dead_rows": 42,
+          "total_bytes": 212992,
+          "table_bytes": 65536
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 60,
+      "completed_in_window": 455,
+      "queue_wait_p95_seconds_in_window": 0.5114417999999997,
+      "queued_now": 0,
+      "tables": {
+        "jobs": {
+          "live_rows": 908,
+          "dead_rows": 670,
+          "total_bytes": 409600,
+          "table_bytes": 237568
+        },
+        "job_attempts": {
+          "live_rows": 900,
+          "dead_rows": 68,
+          "total_bytes": 319488,
+          "table_bytes": 122880
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 90,
+      "completed_in_window": 448,
+      "queue_wait_p95_seconds_in_window": 0.8797722,
+      "queued_now": 1,
+      "tables": {
+        "jobs": {
+          "live_rows": 1353,
+          "dead_rows": 1576,
+          "total_bytes": 532480,
+          "table_bytes": 335872
+        },
+        "job_attempts": {
+          "live_rows": 1353,
+          "dead_rows": 94,
+          "total_bytes": 434176,
+          "table_bytes": 180224
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 121,
+      "completed_in_window": 446,
+      "queue_wait_p95_seconds_in_window": 0.959809,
+      "queued_now": 7,
+      "tables": {
+        "jobs": {
+          "live_rows": 1808,
+          "dead_rows": 667,
+          "total_bytes": 630784,
+          "table_bytes": 425984
+        },
+        "job_attempts": {
+          "live_rows": 1796,
+          "dead_rows": 150,
+          "total_bytes": 516096,
+          "table_bytes": 221184
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 151,
+      "completed_in_window": 456,
+      "queue_wait_p95_seconds_in_window": 0.906101,
+      "queued_now": 2,
+      "tables": {
+        "jobs": {
+          "live_rows": 2262,
+          "dead_rows": 1584,
+          "total_bytes": 786432,
+          "table_bytes": 540672
+        },
+        "job_attempts": {
+          "live_rows": 2256,
+          "dead_rows": 44,
+          "total_bytes": 622592,
+          "table_bytes": 278528
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 181,
+      "completed_in_window": 436,
+      "queue_wait_p95_seconds_in_window": 0.649978,
+      "queued_now": 18,
+      "tables": {
+        "jobs": {
+          "live_rows": 2706,
+          "dead_rows": 660,
+          "total_bytes": 933888,
+          "table_bytes": 647168
+        },
+        "job_attempts": {
+          "live_rows": 2694,
+          "dead_rows": 90,
+          "total_bytes": 761856,
+          "table_bytes": 335872
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 211,
+      "completed_in_window": 454,
+      "queue_wait_p95_seconds_in_window": 0.7490376999999998,
+      "queued_now": 4,
+      "tables": {
+        "jobs": {
+          "live_rows": 3168,
+          "dead_rows": 1579,
+          "total_bytes": 1015808,
+          "table_bytes": 696320
+        },
+        "job_attempts": {
+          "live_rows": 3154,
+          "dead_rows": 144,
+          "total_bytes": 860160,
+          "table_bytes": 385024
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 242,
+      "completed_in_window": 464,
+      "queue_wait_p95_seconds_in_window": 1.12721745,
+      "queued_now": 9,
+      "tables": {
+        "jobs": {
+          "live_rows": 3622,
+          "dead_rows": 744,
+          "total_bytes": 1097728,
+          "table_bytes": 778240
+        },
+        "job_attempts": {
+          "live_rows": 3631,
+          "dead_rows": 107,
+          "total_bytes": 942080,
+          "table_bytes": 434176
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 272,
+      "completed_in_window": 459,
+      "queue_wait_p95_seconds_in_window": 3.327791799999999,
+      "queued_now": 1,
+      "tables": {
+        "jobs": {
+          "live_rows": 4074,
+          "dead_rows": 1642,
+          "total_bytes": 1277952,
+          "table_bytes": 950272
+        },
+        "job_attempts": {
+          "live_rows": 4080,
+          "dead_rows": 54,
+          "total_bytes": 1040384,
+          "table_bytes": 466944
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 302,
+      "completed_in_window": 450,
+      "queue_wait_p95_seconds_in_window": 1.9061500999999996,
+      "queued_now": 2,
+      "tables": {
+        "jobs": {
+          "live_rows": 4523,
+          "dead_rows": 700,
+          "total_bytes": 1351680,
+          "table_bytes": 1007616
+        },
+        "job_attempts": {
+          "live_rows": 4520,
+          "dead_rows": 158,
+          "total_bytes": 1204224,
+          "table_bytes": 565248
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 332,
+      "completed_in_window": 450,
+      "queue_wait_p95_seconds_in_window": 0.9032508499999999,
+      "queued_now": 2,
+      "tables": {
+        "jobs": {
+          "live_rows": 4970,
+          "dead_rows": 1595,
+          "total_bytes": 1531904,
+          "table_bytes": 1122304
+        },
+        "job_attempts": {
+          "live_rows": 4968,
+          "dead_rows": 133,
+          "total_bytes": 1294336,
+          "table_bytes": 606208
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 362,
+      "completed_in_window": 425,
+      "queue_wait_p95_seconds_in_window": 0.7658513999999945,
+      "queued_now": 12,
+      "tables": {
+        "jobs": {
+          "live_rows": 5421,
+          "dead_rows": 652,
+          "total_bytes": 1703936,
+          "table_bytes": 1253376
+        },
+        "job_attempts": {
+          "live_rows": 5400,
+          "dead_rows": 199,
+          "total_bytes": 1449984,
+          "table_bytes": 679936
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 393,
+      "completed_in_window": 477,
+      "queue_wait_p95_seconds_in_window": 1.2543886,
+      "queued_now": 6,
+      "tables": {
+        "jobs": {
+          "live_rows": 5887,
+          "dead_rows": 1608,
+          "total_bytes": 1843200,
+          "table_bytes": 1335296
+        },
+        "job_attempts": {
+          "live_rows": 5878,
+          "dead_rows": 178,
+          "total_bytes": 1531904,
+          "table_bytes": 729088
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 423,
+      "completed_in_window": 456,
+      "queue_wait_p95_seconds_in_window": 0.88028425,
+      "queued_now": 1,
+      "tables": {
+        "jobs": {
+          "live_rows": 6338,
+          "dead_rows": 742,
+          "total_bytes": 1875968,
+          "table_bytes": 1368064
+        },
+        "job_attempts": {
+          "live_rows": 6335,
+          "dead_rows": 88,
+          "total_bytes": 1581056,
+          "table_bytes": 745472
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 453,
+      "completed_in_window": 447,
+      "queue_wait_p95_seconds_in_window": 0.7445563999999999,
+      "queued_now": 2,
+      "tables": {
+        "jobs": {
+          "live_rows": 6787,
+          "dead_rows": 1641,
+          "total_bytes": 2015232,
+          "table_bytes": 1482752
+        },
+        "job_attempts": {
+          "live_rows": 6785,
+          "dead_rows": 88,
+          "total_bytes": 1662976,
+          "table_bytes": 786432
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 483,
+      "completed_in_window": 453,
+      "queue_wait_p95_seconds_in_window": 1.2602554,
+      "queued_now": 3,
+      "tables": {
+        "jobs": {
+          "live_rows": 7243,
+          "dead_rows": 732,
+          "total_bytes": 2113536,
+          "table_bytes": 1548288
+        },
+        "job_attempts": {
+          "live_rows": 7237,
+          "dead_rows": 137,
+          "total_bytes": 1785856,
+          "table_bytes": 868352
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 513,
+      "completed_in_window": 443,
+      "queue_wait_p95_seconds_in_window": 2.6757022,
+      "queued_now": 9,
+      "tables": {
+        "jobs": {
+          "live_rows": 7695,
+          "dead_rows": 1641,
+          "total_bytes": 2334720,
+          "table_bytes": 1761280
+        },
+        "job_attempts": {
+          "live_rows": 7693,
+          "dead_rows": 116,
+          "total_bytes": 1884160,
+          "table_bytes": 909312
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 545,
+      "completed_in_window": 431,
+      "queue_wait_p95_seconds_in_window": 1.1538080000000002,
+      "queued_now": 25,
+      "tables": {
+        "jobs": {
+          "live_rows": 8155,
+          "dead_rows": 713,
+          "total_bytes": 2342912,
+          "table_bytes": 1761280
+        },
+        "job_attempts": {
+          "live_rows": 8128,
+          "dead_rows": 182,
+          "total_bytes": 2015232,
+          "table_bytes": 991232
+        }
+      }
+    },
+    {
+      "elapsed_seconds": 575,
+      "completed_in_window": 490,
+      "queue_wait_p95_seconds_in_window": 2.7779773499999987,
+      "queued_now": 6,
+      "tables": {
+        "jobs": {
+          "live_rows": 8624,
+          "dead_rows": 1694,
+          "total_bytes": 2498560,
+          "table_bytes": 1875968
+        },
+        "job_attempts": {
+          "live_rows": 8618,
+          "dead_rows": 137,
+          "total_bytes": 2146304,
+          "table_bytes": 1040384
+        }
+      }
+    }
+  ]
+}

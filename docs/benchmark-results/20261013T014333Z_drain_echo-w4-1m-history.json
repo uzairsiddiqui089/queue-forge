@@ -1,0 +1,253 @@
+{
+  "scenario": "drain",
+  "label": "echo-w4-1m-history",
+  "environment": {
+    "date": "2026-10-13T01:43:38+00:00",
+    "git_commit": "06c3046",
+    "git_dirty": true,
+    "host": {
+      "os": "Windows-10-10.0.19045-SP0",
+      "python": "3.12.15",
+      "cpu": "Intel(R) Core(TM) i5-3210M CPU @ 2.50GHz (2 cores, 4 threads)",
+      "ram_gb": "7.9"
+    },
+    "docker": "ncpu=4 memory_bytes=4042534912 server=29.8.2",
+    "postgres_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "postgres_settings": {
+      "shared_buffers": "128MB",
+      "work_mem": "4MB",
+      "max_connections": "100",
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "random_page_cost": "4",
+      "effective_cache_size": "4GB"
+    },
+    "application_settings": {
+      "RATE_LIMIT_PER_MINUTE": "100000000",
+      "MAX_QUEUED_JOBS_PER_CLIENT": "10000",
+      "MAX_QUEUED_JOBS_TOTAL": "100000",
+      "MAX_REQUEST_BODY_BYTES": "65536",
+      "WORKER_LEASE_SECONDS": "30",
+      "WORKER_HEARTBEAT_INTERVAL_SECONDS": "10",
+      "WORKER_SWEEP_INTERVAL_SECONDS": "10",
+      "WORKER_SHUTDOWN_DRAIN_SECONDS": "25",
+      "RETRY_BASE_DELAY_SECONDS": "2",
+      "RETRY_MAX_DELAY_SECONDS": "300",
+      "LOG_LEVEL": "INFO",
+      "ENVIRONMENT": "development"
+    },
+    "api_url": "http://127.0.0.1:18000"
+  },
+  "parameters": {
+    "command": "drain",
+    "label": "echo-w4-1m-history",
+    "workers": 4,
+    "jobs": 3000,
+    "repeat": 3,
+    "drain_timeout": 900.0,
+    "kind": "echo",
+    "keep_history": true,
+    "fn": "<function scenario_drain at 0x000001CFEAB88360>"
+  },
+  "runs": [
+    {
+      "drained_within_timeout": true,
+      "drain_seconds_first_start_to_last_finish": 51.980752,
+      "drain_jobs_per_second": 57.71367062946684,
+      "jobs_per_worker": [
+        742,
+        750,
+        754,
+        754
+      ],
+      "jobs": {
+        "jobs": 3000,
+        "succeeded": 3000,
+        "failed": 0,
+        "dead_lettered": 0,
+        "unfinished": 0,
+        "extra_attempts": 0,
+        "error_rate": 0.0,
+        "completion_window_seconds": 52.555122,
+        "completion_per_second": 57.08292333523648,
+        "queue_wait_seconds": {
+          "p50": 27.543096499999997,
+          "p95": 50.72304125,
+          "p99": 52.12112672,
+          "max": "52.539112"
+        },
+        "run_seconds": {
+          "p50": 0.027,
+          "p95": 0.094,
+          "p99": 0.15900999999999976,
+          "max": null
+        },
+        "end_to_end_seconds": {
+          "p50": 27.5658775,
+          "p95": 50.742802899999994,
+          "p99": 52.16342111,
+          "max": "52.555122"
+        }
+      },
+      "containers": {
+        "worker": {
+          "samples": 80,
+          "cpu_percent_mean_per_container": 44.379000000000005,
+          "cpu_percent_max_per_container": 61.74,
+          "memory_mib_max_per_container": 52.78
+        },
+        "api": {
+          "samples": 20,
+          "cpu_percent_mean_per_container": 3.6975000000000002,
+          "cpu_percent_max_per_container": 45.25,
+          "memory_mib_max_per_container": 96.55
+        },
+        "db": {
+          "samples": 20,
+          "cpu_percent_mean_per_container": 92.1605,
+          "cpu_percent_max_per_container": 172.5,
+          "memory_mib_max_per_container": 707.6
+        },
+        "redis": {
+          "samples": 20,
+          "cpu_percent_mean_per_container": 6.361,
+          "cpu_percent_max_per_container": 29.41,
+          "memory_mib_max_per_container": 13.71
+        }
+      }
+    },
+    {
+      "drained_within_timeout": true,
+      "drain_seconds_first_start_to_last_finish": 48.905361,
+      "drain_jobs_per_second": 61.34296810527582,
+      "jobs_per_worker": [
+        745,
+        747,
+        750,
+        758
+      ],
+      "jobs": {
+        "jobs": 3000,
+        "succeeded": 3000,
+        "failed": 0,
+        "dead_lettered": 0,
+        "unfinished": 0,
+        "extra_attempts": 0,
+        "error_rate": 0.0,
+        "completion_window_seconds": 49.362148,
+        "completion_per_second": 60.77531310023219,
+        "queue_wait_seconds": {
+          "p50": 28.521676499999998,
+          "p95": 47.531744,
+          "p99": 48.80582637999999,
+          "max": "49.324177"
+        },
+        "run_seconds": {
+          "p50": 0.027,
+          "p95": 0.082,
+          "p99": 0.14903999999999903,
+          "max": null
+        },
+        "end_to_end_seconds": {
+          "p50": 28.5414205,
+          "p95": 47.5491944,
+          "p99": 48.828071679999994,
+          "max": "49.362148"
+        }
+      },
+      "containers": {
+        "worker": {
+          "samples": 84,
+          "cpu_percent_mean_per_container": 45.6875,
+          "cpu_percent_max_per_container": 60.71,
+          "memory_mib_max_per_container": 55.69
+        },
+        "api": {
+          "samples": 21,
+          "cpu_percent_mean_per_container": 2.520952380952381,
+          "cpu_percent_max_per_container": 47.8,
+          "memory_mib_max_per_container": 82.89
+        },
+        "db": {
+          "samples": 21,
+          "cpu_percent_mean_per_container": 89.94857142857143,
+          "cpu_percent_max_per_container": 195.24,
+          "memory_mib_max_per_container": 709.5
+        },
+        "redis": {
+          "samples": 21,
+          "cpu_percent_mean_per_container": 2.4257142857142857,
+          "cpu_percent_max_per_container": 9.64,
+          "memory_mib_max_per_container": 12.98
+        }
+      }
+    },
+    {
+      "drained_within_timeout": true,
+      "drain_seconds_first_start_to_last_finish": 51.088521,
+      "drain_jobs_per_second": 58.72160597485294,
+      "jobs_per_worker": [
+        741,
+        742,
+        756,
+        761
+      ],
+      "jobs": {
+        "jobs": 3000,
+        "succeeded": 3000,
+        "failed": 0,
+        "dead_lettered": 0,
+        "unfinished": 0,
+        "extra_attempts": 0,
+        "error_rate": 0.0,
+        "completion_window_seconds": 52.240496,
+        "completion_per_second": 57.42671355953435,
+        "queue_wait_seconds": {
+          "p50": 28.145660499999998,
+          "p95": 50.5003439,
+          "p99": 51.66532379999999,
+          "max": "52.213985"
+        },
+        "run_seconds": {
+          "p50": 0.027,
+          "p95": 0.09804999999999973,
+          "p99": 0.16300999999999977,
+          "max": null
+        },
+        "end_to_end_seconds": {
+          "p50": 28.166217500000002,
+          "p95": 50.53648809999999,
+          "p99": 51.71620118999998,
+          "max": "52.240496"
+        }
+      },
+      "containers": {
+        "worker": {
+          "samples": 84,
+          "cpu_percent_mean_per_container": 44.95630952380952,
+          "cpu_percent_max_per_container": 63.06,
+          "memory_mib_max_per_container": 52.71
+        },
+        "api": {
+          "samples": 21,
+          "cpu_percent_mean_per_container": 0.9480952380952381,
+          "cpu_percent_max_per_container": 14.15,
+          "memory_mib_max_per_container": 85.82
+        },
+        "db": {
+          "samples": 21,
+          "cpu_percent_mean_per_container": 88.37238095238095,
+          "cpu_percent_max_per_container": 228.12,
+          "memory_mib_max_per_container": 717.1
+        },
+        "redis": {
+          "samples": 21,
+          "cpu_percent_mean_per_container": 3.6647619047619053,
+          "cpu_percent_max_per_container": 26.51,
+          "memory_mib_max_per_container": 12.84
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 """The /metrics endpoint reports queue state straight from the database."""
 
+import time
 import uuid
 from collections.abc import Callable
 
@@ -91,3 +92,33 @@ def test_dead_letter_and_failure_counts(
     m = scrape(api, admin_key)
     assert m["queueforge_jobs{status=dead_lettered}"] == 1
     assert m["queueforge_job_attempts_total{outcome=retryable_error}"] == 5
+
+
+def test_metrics_are_reused_for_the_cache_interval_and_refresh_after_it(
+    engine: Engine, make_client: MakeClient, make_admin: MakeClient
+) -> None:
+    from queueforge.api.app import create_app
+
+    sessions = sessionmaker(engine, expire_on_commit=False)
+    client_id, _ = make_client("alice")
+    _, admin_key = make_admin("ops")
+    api = TestClient(create_app(engine=engine, metrics_cache_seconds=0.6))
+
+    def queued() -> float:
+        return scrape(api, admin_key)["queueforge_jobs{status=queued}"]
+
+    assert queued() == 0
+    with sessions() as session:
+        job_service.submit_job(session, client_id, "echo", {"message": "a"}, None)
+    assert queued() == 0  # still the cached reading: the database was not asked again
+    time.sleep(0.8)
+    assert queued() == 1  # the interval passed, so the new job is now visible
+
+
+def test_new_indexes_are_used_by_the_sweeper_and_dead_letter_queries(engine: Engine) -> None:
+    with engine.connect() as conn:
+        names = {
+            r[0]
+            for r in conn.execute(text("SELECT indexname FROM pg_indexes WHERE tablename = 'jobs'"))
+        }
+    assert {"ix_jobs_running_lease", "ix_jobs_dead_lettered_completed"} <= names

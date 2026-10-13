@@ -1,0 +1,625 @@
+{
+  "scenario": "plans",
+  "label": "1m-queue100k",
+  "environment": {
+    "date": "2026-10-13T01:45:43+00:00",
+    "git_commit": "06c3046",
+    "git_dirty": true,
+    "host": {
+      "os": "Windows-10-10.0.19045-SP0",
+      "python": "3.12.15",
+      "cpu": "Intel(R) Core(TM) i5-3210M CPU @ 2.50GHz (2 cores, 4 threads)",
+      "ram_gb": "7.9"
+    },
+    "docker": "ncpu=4 memory_bytes=4042534912 server=29.8.2",
+    "postgres_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "postgres_settings": {
+      "shared_buffers": "128MB",
+      "work_mem": "4MB",
+      "max_connections": "100",
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "wal_level": "replica",
+      "random_page_cost": "4",
+      "effective_cache_size": "4GB"
+    },
+    "application_settings": {
+      "RATE_LIMIT_PER_MINUTE": "100000000",
+      "MAX_QUEUED_JOBS_PER_CLIENT": "10000",
+      "MAX_QUEUED_JOBS_TOTAL": "100000",
+      "MAX_REQUEST_BODY_BYTES": "65536",
+      "WORKER_LEASE_SECONDS": "30",
+      "WORKER_HEARTBEAT_INTERVAL_SECONDS": "10",
+      "WORKER_SWEEP_INTERVAL_SECONDS": "10",
+      "WORKER_SHUTDOWN_DRAIN_SECONDS": "25",
+      "RETRY_BASE_DELAY_SECONDS": "2",
+      "RETRY_MAX_DELAY_SECONDS": "300",
+      "LOG_LEVEL": "INFO",
+      "ENVIRONMENT": "development"
+    },
+    "api_url": "http://127.0.0.1:18000"
+  },
+  "parameters": {
+    "command": "plans",
+    "label": "1m-queue100k",
+    "queued": 100000,
+    "repeat": 3,
+    "fn": "<function scenario_plans at 0x000001D988998720>"
+  },
+  "tables": {
+    "jobs": {
+      "live_rows": 1084611,
+      "dead_rows": 0,
+      "total_bytes": 270737408,
+      "table_bytes": 212393984
+    },
+    "job_attempts": {
+      "live_rows": 1000000,
+      "dead_rows": 14449,
+      "total_bytes": 219717632,
+      "table_bytes": 102776832
+    }
+  },
+  "candidate_indexes": [
+    "CREATE INDEX cand_running_lease ON jobs (lease_expires_at) WHERE status = 'running'",
+    "CREATE INDEX cand_dead_completed ON jobs (completed_at DESC, id) WHERE status = 'dead_lettered'"
+  ],
+  "current_schema": {
+    "claim_next_job": {
+      "execution_ms_each_run": [
+        1.142,
+        0.438,
+        0.761
+      ],
+      "top_node": "Limit  (cost=1.25..2.13 rows=1 width=38) (actual time=0.403..0.405 rows=1 loops=1)",
+      "plan": [
+        "Limit  (cost=1.25..2.13 rows=1 width=38) (actual time=0.403..0.405 rows=1 loops=1)",
+        "  Buffers: shared hit=207",
+        "  ->  LockRows  (cost=1.25..88940.21 rows=101277 width=38) (actual time=0.402..0.403 rows=1 loops=1)",
+        "        Buffers: shared hit=207",
+        "        ->  Incremental Sort  (cost=1.25..87927.44 rows=101277 width=38) (actual time=0.385..0.386 rows=1 loops=1)",
+        "              Sort Key: run_at, created_at",
+        "              Presorted Key: run_at",
+        "              Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB",
+        "              Buffers: shared hit=206",
+        "              ->  Index Scan using ix_jobs_queued_run_at on jobs  (cost=0.42..83370.40 rows=101277 width=38) (actual time=0.354..0.368 rows=33 loops=1)",
+        "                    Index Cond: (run_at <= now())",
+        "                    Filter: ((status)::text = 'queued'::text)",
+        "                    Buffers: shared hit=206",
+        "Planning Time: 0.156 ms",
+        "Execution Time: 0.438 ms"
+      ]
+    },
+    "sweeper_find_expired": {
+      "execution_ms_each_run": [
+        247.417,
+        249.445,
+        274.355
+      ],
+      "top_node": "Limit  (cost=45186.64..45186.65 rows=1 width=38) (actual time=247.339..247.382 rows=50 loops=1)",
+      "plan": [
+        "Limit  (cost=45186.64..45186.65 rows=1 width=38) (actual time=247.339..247.382 rows=50 loops=1)",
+        "  Buffers: shared hit=6895 read=19082",
+        "  ->  LockRows  (cost=45186.64..45186.65 rows=1 width=38) (actual time=247.338..247.376 rows=50 loops=1)",
+        "        Buffers: shared hit=6895 read=19082",
+        "        ->  Sort  (cost=45186.64..45186.64 rows=1 width=38) (actual time=247.317..247.321 rows=50 loops=1)",
+        "              Sort Key: lease_expires_at",
+        "              Sort Method: quicksort  Memory: 28kB",
+        "              Buffers: shared hit=6845 read=19082",
+        "              ->  Seq Scan on jobs  (cost=0.00..45186.62 rows=1 width=38) (actual time=41.547..247.295 rows=50 loops=1)",
+        "                    Filter: (((status)::text = 'running'::text) AND (lease_expires_at < now()))",
+        "                    Rows Removed by Filter: 1100500",
+        "                    Buffers: shared hit=6845 read=19082",
+        "Planning:",
+        "  Buffers: shared hit=9",
+        "Planning Time: 0.170 ms",
+        "Execution Time: 247.417 ms"
+      ]
+    },
+    "per_client_queue_count": {
+      "execution_ms_each_run": [
+        5.202,
+        4.959,
+        5.807
+      ],
+      "top_node": "Aggregate  (cost=4986.03..4986.04 rows=1 width=8) (actual time=4.924..4.925 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=4986.03..4986.04 rows=1 width=8) (actual time=4.924..4.925 rows=1 loops=1)",
+        "  Buffers: shared hit=214",
+        "  ->  Limit  (cost=0.29..4869.97 rows=9285 width=16) (actual time=0.085..4.232 rows=10000 loops=1)",
+        "        Buffers: shared hit=214",
+        "        ->  Index Only Scan using ix_jobs_client_queued on jobs  (cost=0.29..4869.97 rows=9285 width=16) (actual time=0.083..3.208 rows=10000 loops=1)",
+        "              Index Cond: (client_id = '03539815-3159-4bbd-b2ae-91a7ac88a1cd'::uuid)",
+        "              Heap Fetches: 10000",
+        "              Buffers: shared hit=214",
+        "Planning Time: 0.166 ms",
+        "Execution Time: 4.959 ms"
+      ]
+    },
+    "global_queue_count": {
+      "execution_ms_each_run": [
+        47.83,
+        47.612,
+        99.025
+      ],
+      "top_node": "Aggregate  (cost=18441.29..18441.30 rows=1 width=8) (actual time=47.576..47.577 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=18441.29..18441.30 rows=1 width=8) (actual time=47.576..47.577 rows=1 loops=1)",
+        "  Buffers: shared hit=1837",
+        "  ->  Limit  (cost=0.29..17191.29 rows=100000 width=16) (actual time=0.060..40.940 rows=100000 loops=1)",
+        "        Buffers: shared hit=1837",
+        "        ->  Index Only Scan using ix_jobs_client_queued on jobs  (cost=0.29..17412.54 rows=101287 width=16) (actual time=0.059..31.419 rows=100000 loops=1)",
+        "              Heap Fetches: 100000",
+        "              Buffers: shared hit=1837",
+        "Planning Time: 0.154 ms",
+        "Execution Time: 47.612 ms"
+      ]
+    },
+    "dead_letter_listing": {
+      "execution_ms_each_run": [
+        137.042,
+        137.791,
+        270.889
+      ],
+      "top_node": "Limit  (cost=32790.07..32795.91 rows=50 width=225) (actual time=130.232..136.999 rows=50 loops=1)",
+      "plan": [
+        "Limit  (cost=32790.07..32795.91 rows=50 width=225) (actual time=130.232..136.999 rows=50 loops=1)",
+        "  Buffers: shared hit=7029 read=18986",
+        "  ->  Gather Merge  (cost=32790.07..33710.40 rows=7888 width=225) (actual time=130.230..136.990 rows=50 loops=1)",
+        "        Workers Planned: 2",
+        "        Workers Launched: 2",
+        "        Buffers: shared hit=7029 read=18986",
+        "        ->  Sort  (cost=31790.05..31799.91 rows=3944 width=225) (actual time=123.741..123.748 rows=39 loops=3)",
+        "              Sort Key: completed_at DESC, id",
+        "              Sort Method: top-N heapsort  Memory: 37kB",
+        "              Buffers: shared hit=7029 read=18986",
+        "              Worker 0:  Sort Method: top-N heapsort  Memory: 37kB",
+        "              Worker 1:  Sort Method: top-N heapsort  Memory: 37kB",
+        "              ->  Parallel Seq Scan on jobs  (cost=0.00..31659.03 rows=3944 width=225) (actual time=0.085..121.335 rows=3333 loops=3)",
+        "                    Filter: ((status)::text = 'dead_lettered'::text)",
+        "                    Rows Removed by Filter: 363517",
+        "                    Buffers: shared hit=6941 read=18986",
+        "Planning:",
+        "  Buffers: shared hit=29",
+        "Planning Time: 0.288 ms",
+        "Execution Time: 137.042 ms"
+      ]
+    },
+    "metrics_jobs_by_status": {
+      "execution_ms_each_run": [
+        609.625,
+        430.54,
+        273.837
+      ],
+      "top_node": "Finalize GroupAggregate  (cost=33805.54..33806.55 rows=4 width=17) (actual time=268.919..273.779 rows=4 loops=1)",
+      "plan": [
+        "Finalize GroupAggregate  (cost=33805.54..33806.55 rows=4 width=17) (actual time=268.919..273.779 rows=4 loops=1)",
+        "  Group Key: status",
+        "  Buffers: shared hit=7405 read=18538 written=5",
+        "  ->  Gather Merge  (cost=33805.54..33806.47 rows=8 width=17) (actual time=268.907..273.764 rows=10 loops=1)",
+        "        Workers Planned: 2",
+        "        Workers Launched: 2",
+        "        Buffers: shared hit=7405 read=18538 written=5",
+        "        ->  Sort  (cost=32805.51..32805.53 rows=4 width=17) (actual time=259.044..259.046 rows=3 loops=3)",
+        "              Sort Key: status",
+        "              Sort Method: quicksort  Memory: 25kB",
+        "              Buffers: shared hit=7405 read=18538 written=5",
+        "              Worker 0:  Sort Method: quicksort  Memory: 25kB",
+        "              Worker 1:  Sort Method: quicksort  Memory: 25kB",
+        "              ->  Partial HashAggregate  (cost=32805.43..32805.47 rows=4 width=17) (actual time=258.957..258.959 rows=3 loops=3)",
+        "                    Group Key: status",
+        "                    Batches: 1  Memory Usage: 24kB",
+        "                    Buffers: shared hit=7389 read=18538 written=5",
+        "                    Worker 0:  Batches: 1  Memory Usage: 24kB",
+        "                    Worker 1:  Batches: 1  Memory Usage: 24kB",
+        "                    ->  Parallel Seq Scan on jobs  (cost=0.00..30512.62 rows=458562 width=9) (actual time=0.061..90.970 rows=366850 loops=3)",
+        "                          Buffers: shared hit=7389 read=18538 written=5",
+        "Planning Time: 0.173 ms",
+        "Execution Time: 273.837 ms"
+      ]
+    },
+    "metrics_oldest_queued": {
+      "execution_ms_each_run": [
+        1.083,
+        0.568,
+        0.534
+      ],
+      "top_node": "Result  (cost=0.62..0.64 rows=1 width=32) (actual time=0.491..0.492 rows=1 loops=1)",
+      "plan": [
+        "Result  (cost=0.62..0.64 rows=1 width=32) (actual time=0.491..0.492 rows=1 loops=1)",
+        "  Buffers: shared hit=206",
+        "  InitPlan 1 (returns $0)",
+        "    ->  Limit  (cost=0.42..0.62 rows=1 width=8) (actual time=0.476..0.478 rows=1 loops=1)",
+        "          Buffers: shared hit=206",
+        "          ->  Index Only Scan using ix_jobs_queued_run_at on jobs  (cost=0.42..20273.48 rows=101277 width=8) (actual time=0.474..0.475 rows=1 loops=1)",
+        "                Index Cond: ((run_at IS NOT NULL) AND (run_at <= now()))",
+        "                Heap Fetches: 1",
+        "                Buffers: shared hit=206",
+        "Planning Time: 0.698 ms",
+        "Execution Time: 0.534 ms"
+      ]
+    },
+    "metrics_oldest_running": {
+      "execution_ms_each_run": [
+        201.248,
+        219.288,
+        115.605
+      ],
+      "top_node": "Aggregate  (cost=17762.48..17762.50 rows=1 width=32) (actual time=111.081..115.545 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=17762.48..17762.50 rows=1 width=32) (actual time=111.081..115.545 rows=1 loops=1)",
+        "  Buffers: shared hit=238 read=12308",
+        "  ->  Nested Loop  (cost=1000.43..17762.48 rows=1 width=8) (actual time=111.074..115.538 rows=0 loops=1)",
+        "        Buffers: shared hit=238 read=12308",
+        "        ->  Gather  (cost=1000.00..17754.02 rows=1 width=28) (actual time=111.073..115.534 rows=0 loops=1)",
+        "              Workers Planned: 2",
+        "              Workers Launched: 2",
+        "              Buffers: shared hit=238 read=12308",
+        "              ->  Parallel Seq Scan on job_attempts a  (cost=0.00..16753.92 rows=1 width=28) (actual time=103.202..103.202 rows=0 loops=3)",
+        "                    Filter: (outcome IS NULL)",
+        "                    Rows Removed by Filter: 333333",
+        "                    Buffers: shared hit=238 read=12308",
+        "        ->  Index Scan using jobs_pkey on jobs j  (cost=0.43..8.45 rows=1 width=20) (never executed)",
+        "              Index Cond: (id = a.job_id)",
+        "              Filter: (((status)::text = 'running'::text) AND (a.attempt_number = attempts))",
+        "Planning:",
+        "  Buffers: shared hit=17",
+        "Planning Time: 0.526 ms",
+        "Execution Time: 115.605 ms"
+      ]
+    },
+    "metrics_expired_leases": {
+      "execution_ms_each_run": [
+        156.852,
+        131.191,
+        283.542
+      ],
+      "top_node": "Aggregate  (cost=34951.95..34951.96 rows=1 width=8) (actual time=124.563..131.155 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=34951.95..34951.96 rows=1 width=8) (actual time=124.563..131.155 rows=1 loops=1)",
+        "  Buffers: shared hit=7521 read=18406 written=13",
+        "  ->  Gather  (cost=1000.00..34951.94 rows=1 width=0) (actual time=31.606..131.140 rows=50 loops=1)",
+        "        Workers Planned: 2",
+        "        Workers Launched: 2",
+        "        Buffers: shared hit=7521 read=18406 written=13",
+        "        ->  Parallel Seq Scan on jobs  (cost=0.00..33951.84 rows=1 width=0) (actual time=87.559..118.473 rows=17 loops=3)",
+        "              Filter: (((status)::text = 'running'::text) AND (lease_expires_at < now()))",
+        "              Rows Removed by Filter: 366833",
+        "              Buffers: shared hit=7521 read=18406 written=13",
+        "Planning Time: 0.133 ms",
+        "Execution Time: 131.191 ms"
+      ]
+    },
+    "metrics_attempts_by_outcome": {
+      "execution_ms_each_run": [
+        316.078,
+        239.765,
+        418.427
+      ],
+      "top_node": "Finalize GroupAggregate  (cost=19857.92..19858.18 rows=1 width=18) (actual time=236.364..239.680 rows=1 loops=1)",
+      "plan": [
+        "Finalize GroupAggregate  (cost=19857.92..19858.18 rows=1 width=18) (actual time=236.364..239.680 rows=1 loops=1)",
+        "  Group Key: outcome",
+        "  Buffers: shared hit=446 read=12116",
+        "  ->  Gather Merge  (cost=19857.92..19858.16 rows=2 width=18) (actual time=236.353..239.668 rows=3 loops=1)",
+        "        Workers Planned: 2",
+        "        Workers Launched: 2",
+        "        Buffers: shared hit=446 read=12116",
+        "        ->  Sort  (cost=18857.90..18857.91 rows=1 width=18) (actual time=228.047..228.048 rows=1 loops=3)",
+        "              Sort Key: outcome",
+        "              Sort Method: quicksort  Memory: 25kB",
+        "              Buffers: shared hit=446 read=12116",
+        "              Worker 0:  Sort Method: quicksort  Memory: 25kB",
+        "              Worker 1:  Sort Method: quicksort  Memory: 25kB",
+        "              ->  Partial HashAggregate  (cost=18857.88..18857.89 rows=1 width=18) (actual time=227.980..227.982 rows=1 loops=3)",
+        "                    Group Key: outcome",
+        "                    Batches: 1  Memory Usage: 24kB",
+        "                    Buffers: shared hit=430 read=12116",
+        "                    Worker 0:  Batches: 1  Memory Usage: 24kB",
+        "                    Worker 1:  Batches: 1  Memory Usage: 24kB",
+        "                    ->  Parallel Seq Scan on job_attempts  (cost=0.00..16753.92 rows=420792 width=10) (actual time=0.052..66.418 rows=333333 loops=3)",
+        "                          Buffers: shared hit=430 read=12116",
+        "Planning Time: 0.204 ms",
+        "Execution Time: 239.765 ms"
+      ]
+    },
+    "get_job_by_id": {
+      "execution_ms_each_run": [
+        0.078,
+        0.053,
+        0.08
+      ],
+      "top_node": "Index Scan using jobs_pkey on jobs  (cost=0.43..8.45 rows=1 width=225) (actual time=0.025..0.027 rows=1 loops=1)",
+      "plan": [
+        "Index Scan using jobs_pkey on jobs  (cost=0.43..8.45 rows=1 width=225) (actual time=0.025..0.027 rows=1 loops=1)",
+        "  Index Cond: (id = '5f4f096d-4ba1-46ed-b798-81d9d63fe6eb'::uuid)",
+        "  Buffers: shared hit=4",
+        "Planning Time: 0.241 ms",
+        "Execution Time: 0.053 ms"
+      ]
+    },
+    "attempt_history_for_job": {
+      "execution_ms_each_run": [
+        0.091,
+        0.047,
+        0.059
+      ],
+      "top_node": "Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.42..8.44 rows=1 width=796) (actual time=0.024..0.026 rows=1 loops=1)",
+      "plan": [
+        "Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.42..8.44 rows=1 width=796) (actual time=0.024..0.026 rows=1 loops=1)",
+        "  Index Cond: (job_id = '5f4f096d-4ba1-46ed-b798-81d9d63fe6eb'::uuid)",
+        "  Buffers: shared hit=4",
+        "Planning Time: 0.111 ms",
+        "Execution Time: 0.047 ms"
+      ]
+    }
+  },
+  "with_candidate_indexes": {
+    "claim_next_job": {
+      "execution_ms_each_run": [
+        0.576,
+        0.407,
+        0.482
+      ],
+      "top_node": "Limit  (cost=1.25..2.12 rows=1 width=38) (actual time=0.364..0.365 rows=1 loops=1)",
+      "plan": [
+        "Limit  (cost=1.25..2.12 rows=1 width=38) (actual time=0.364..0.365 rows=1 loops=1)",
+        "  Buffers: shared hit=207",
+        "  ->  LockRows  (cost=1.25..89584.55 rows=102561 width=38) (actual time=0.363..0.364 rows=1 loops=1)",
+        "        Buffers: shared hit=207",
+        "        ->  Incremental Sort  (cost=1.25..88558.94 rows=102561 width=38) (actual time=0.346..0.346 rows=1 loops=1)",
+        "              Sort Key: run_at, created_at",
+        "              Presorted Key: run_at",
+        "              Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB",
+        "              Buffers: shared hit=206",
+        "              ->  Index Scan using ix_jobs_queued_run_at on jobs  (cost=0.42..83943.70 rows=102561 width=38) (actual time=0.314..0.328 rows=33 loops=1)",
+        "                    Index Cond: (run_at <= now())",
+        "                    Filter: ((status)::text = 'queued'::text)",
+        "                    Buffers: shared hit=206",
+        "Planning Time: 0.241 ms",
+        "Execution Time: 0.407 ms"
+      ]
+    },
+    "sweeper_find_expired": {
+      "execution_ms_each_run": [
+        0.141,
+        0.144,
+        0.187
+      ],
+      "top_node": "Limit  (cost=0.13..8.16 rows=1 width=38) (actual time=0.047..0.112 rows=50 loops=1)",
+      "plan": [
+        "Limit  (cost=0.13..8.16 rows=1 width=38) (actual time=0.047..0.112 rows=50 loops=1)",
+        "  Buffers: shared hit=52 read=1",
+        "  ->  LockRows  (cost=0.13..8.16 rows=1 width=38) (actual time=0.046..0.104 rows=50 loops=1)",
+        "        Buffers: shared hit=52 read=1",
+        "        ->  Index Scan using cand_running_lease on jobs  (cost=0.13..8.15 rows=1 width=38) (actual time=0.029..0.055 rows=50 loops=1)",
+        "              Index Cond: (lease_expires_at < now())",
+        "              Filter: ((status)::text = 'running'::text)",
+        "              Buffers: shared hit=2 read=1",
+        "Planning:",
+        "  Buffers: shared hit=11",
+        "Planning Time: 0.254 ms",
+        "Execution Time: 0.141 ms"
+      ]
+    },
+    "per_client_queue_count": {
+      "execution_ms_each_run": [
+        5.091,
+        5.277,
+        4.829
+      ],
+      "top_node": "Aggregate  (cost=5116.42..5116.43 rows=1 width=8) (actual time=4.795..4.796 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=5116.42..5116.43 rows=1 width=8) (actual time=4.795..4.796 rows=1 loops=1)",
+        "  Buffers: shared hit=214",
+        "  ->  Limit  (cost=0.29..4997.60 rows=9505 width=16) (actual time=0.062..4.176 rows=10000 loops=1)",
+        "        Buffers: shared hit=214",
+        "        ->  Index Only Scan using ix_jobs_client_queued on jobs  (cost=0.29..4997.60 rows=9505 width=16) (actual time=0.061..3.157 rows=10000 loops=1)",
+        "              Index Cond: (client_id = '03539815-3159-4bbd-b2ae-91a7ac88a1cd'::uuid)",
+        "              Heap Fetches: 10000",
+        "              Buffers: shared hit=214",
+        "Planning Time: 0.177 ms",
+        "Execution Time: 4.829 ms"
+      ]
+    },
+    "global_queue_count": {
+      "execution_ms_each_run": [
+        43.587,
+        44.378,
+        47.143
+      ],
+      "top_node": "Aggregate  (cost=18341.02..18341.03 rows=1 width=8) (actual time=43.551..43.553 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=18341.02..18341.03 rows=1 width=8) (actual time=43.551..43.553 rows=1 loops=1)",
+        "  Buffers: shared hit=1837",
+        "  ->  Limit  (cost=0.29..17091.02 rows=100000 width=16) (actual time=0.061..37.554 rows=100000 loops=1)",
+        "        Buffers: shared hit=1837",
+        "        ->  Index Only Scan using ix_jobs_client_queued on jobs  (cost=0.29..17530.42 rows=102571 width=16) (actual time=0.060..28.481 rows=100000 loops=1)",
+        "              Heap Fetches: 100000",
+        "              Buffers: shared hit=1837",
+        "Planning Time: 0.163 ms",
+        "Execution Time: 43.587 ms"
+      ]
+    },
+    "dead_letter_listing": {
+      "execution_ms_each_run": [
+        0.367,
+        0.133,
+        0.119
+      ],
+      "top_node": "Limit  (cost=0.29..76.47 rows=50 width=431) (actual time=0.022..0.090 rows=50 loops=1)",
+      "plan": [
+        "Limit  (cost=0.29..76.47 rows=50 width=431) (actual time=0.022..0.090 rows=50 loops=1)",
+        "  Buffers: shared hit=52",
+        "  ->  Index Scan using cand_dead_completed on jobs  (cost=0.29..14814.18 rows=9722 width=431) (actual time=0.021..0.083 rows=50 loops=1)",
+        "        Buffers: shared hit=52",
+        "Planning Time: 0.248 ms",
+        "Execution Time: 0.119 ms"
+      ]
+    },
+    "metrics_jobs_by_status": {
+      "execution_ms_each_run": [
+        276.501,
+        256.239,
+        257.32
+      ],
+      "top_node": "Finalize GroupAggregate  (cost=33805.51..33806.27 rows=3 width=17) (actual time=246.862..256.179 rows=4 loops=1)",
+      "plan": [
+        "Finalize GroupAggregate  (cost=33805.51..33806.27 rows=3 width=17) (actual time=246.862..256.179 rows=4 loops=1)",
+        "  Group Key: status",
+        "  Buffers: shared hit=8035 read=17908",
+        "  ->  Gather Merge  (cost=33805.51..33806.21 rows=6 width=17) (actual time=246.850..256.163 rows=10 loops=1)",
+        "        Workers Planned: 2",
+        "        Workers Launched: 2",
+        "        Buffers: shared hit=8035 read=17908",
+        "        ->  Sort  (cost=32805.49..32805.50 rows=3 width=17) (actual time=240.757..240.759 rows=3 loops=3)",
+        "              Sort Key: status",
+        "              Sort Method: quicksort  Memory: 25kB",
+        "              Buffers: shared hit=8035 read=17908",
+        "              Worker 0:  Sort Method: quicksort  Memory: 25kB",
+        "              Worker 1:  Sort Method: quicksort  Memory: 25kB",
+        "              ->  Partial HashAggregate  (cost=32805.43..32805.46 rows=3 width=17) (actual time=240.686..240.688 rows=3 loops=3)",
+        "                    Group Key: status",
+        "                    Batches: 1  Memory Usage: 24kB",
+        "                    Buffers: shared hit=8019 read=17908",
+        "                    Worker 0:  Batches: 1  Memory Usage: 24kB",
+        "                    Worker 1:  Batches: 1  Memory Usage: 24kB",
+        "                    ->  Parallel Seq Scan on jobs  (cost=0.00..30512.62 rows=458562 width=9) (actual time=0.053..85.243 rows=366850 loops=3)",
+        "                          Buffers: shared hit=8019 read=17908",
+        "Planning Time: 0.123 ms",
+        "Execution Time: 256.239 ms"
+      ]
+    },
+    "metrics_oldest_queued": {
+      "execution_ms_each_run": [
+        0.612,
+        0.355,
+        0.385
+      ],
+      "top_node": "Result  (cost=0.62..0.64 rows=1 width=32) (actual time=0.328..0.329 rows=1 loops=1)",
+      "plan": [
+        "Result  (cost=0.62..0.64 rows=1 width=32) (actual time=0.328..0.329 rows=1 loops=1)",
+        "  Buffers: shared hit=206",
+        "  InitPlan 1 (returns $0)",
+        "    ->  Limit  (cost=0.42..0.62 rows=1 width=8) (actual time=0.317..0.318 rows=1 loops=1)",
+        "          Buffers: shared hit=206",
+        "          ->  Index Only Scan using ix_jobs_queued_run_at on jobs  (cost=0.42..20406.86 rows=102561 width=8) (actual time=0.316..0.316 rows=1 loops=1)",
+        "                Index Cond: ((run_at IS NOT NULL) AND (run_at <= now()))",
+        "                Heap Fetches: 1",
+        "                Buffers: shared hit=206",
+        "Planning Time: 0.315 ms",
+        "Execution Time: 0.355 ms"
+      ]
+    },
+    "metrics_oldest_running": {
+      "execution_ms_each_run": [
+        0.824,
+        0.286,
+        0.336
+      ],
+      "top_node": "Aggregate  (cost=16.60..16.62 rows=1 width=32) (actual time=0.229..0.231 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=16.60..16.62 rows=1 width=32) (actual time=0.229..0.231 rows=1 loops=1)",
+        "  Buffers: shared hit=153",
+        "  ->  Nested Loop  (cost=0.55..16.59 rows=1 width=8) (actual time=0.225..0.226 rows=0 loops=1)",
+        "        Buffers: shared hit=153",
+        "        ->  Index Scan using cand_running_lease on jobs j  (cost=0.12..8.14 rows=1 width=20) (actual time=0.011..0.025 rows=50 loops=1)",
+        "              Buffers: shared hit=3",
+        "        ->  Index Scan using ix_job_attempts_job_id on job_attempts a  (cost=0.42..8.45 rows=1 width=28) (actual time=0.004..0.004 rows=0 loops=50)",
+        "              Index Cond: (job_id = j.id)",
+        "              Filter: ((outcome IS NULL) AND (attempt_number = j.attempts))",
+        "              Buffers: shared hit=150",
+        "Planning:",
+        "  Buffers: shared hit=17",
+        "Planning Time: 0.540 ms",
+        "Execution Time: 0.286 ms"
+      ]
+    },
+    "metrics_expired_leases": {
+      "execution_ms_each_run": [
+        0.073,
+        0.08,
+        0.124
+      ],
+      "top_node": "Aggregate  (cost=8.15..8.16 rows=1 width=8) (actual time=0.044..0.045 rows=1 loops=1)",
+      "plan": [
+        "Aggregate  (cost=8.15..8.16 rows=1 width=8) (actual time=0.044..0.045 rows=1 loops=1)",
+        "  Buffers: shared hit=4",
+        "  ->  Index Only Scan using cand_running_lease on jobs  (cost=0.13..8.14 rows=1 width=0) (actual time=0.021..0.037 rows=50 loops=1)",
+        "        Index Cond: (lease_expires_at < now())",
+        "        Heap Fetches: 50",
+        "        Buffers: shared hit=4",
+        "Planning Time: 0.150 ms",
+        "Execution Time: 0.073 ms"
+      ]
+    },
+    "metrics_attempts_by_outcome": {
+      "execution_ms_each_run": [
+        246.991,
+        220.173,
+        314.834
+      ],
+      "top_node": "Finalize GroupAggregate  (cost=19857.92..19858.18 rows=1 width=18) (actual time=216.664..220.118 rows=1 loops=1)",
+      "plan": [
+        "Finalize GroupAggregate  (cost=19857.92..19858.18 rows=1 width=18) (actual time=216.664..220.118 rows=1 loops=1)",
+        "  Group Key: outcome",
+        "  Buffers: shared hit=734 read=11828",
+        "  ->  Gather Merge  (cost=19857.92..19858.16 rows=2 width=18) (actual time=216.652..220.107 rows=3 loops=1)",
+        "        Workers Planned: 2",
+        "        Workers Launched: 2",
+        "        Buffers: shared hit=734 read=11828",
+        "        ->  Sort  (cost=18857.90..18857.91 rows=1 width=18) (actual time=210.934..210.936 rows=1 loops=3)",
+        "              Sort Key: outcome",
+        "              Sort Method: quicksort  Memory: 25kB",
+        "              Buffers: shared hit=734 read=11828",
+        "              Worker 0:  Sort Method: quicksort  Memory: 25kB",
+        "              Worker 1:  Sort Method: quicksort  Memory: 25kB",
+        "              ->  Partial HashAggregate  (cost=18857.88..18857.89 rows=1 width=18) (actual time=210.884..210.886 rows=1 loops=3)",
+        "                    Group Key: outcome",
+        "                    Batches: 1  Memory Usage: 24kB",
+        "                    Buffers: shared hit=718 read=11828",
+        "                    Worker 0:  Batches: 1  Memory Usage: 24kB",
+        "                    Worker 1:  Batches: 1  Memory Usage: 24kB",
+        "                    ->  Parallel Seq Scan on job_attempts  (cost=0.00..16753.92 rows=420792 width=10) (actual time=0.037..62.253 rows=333333 loops=3)",
+        "                          Buffers: shared hit=718 read=11828",
+        "Planning Time: 0.109 ms",
+        "Execution Time: 220.173 ms"
+      ]
+    },
+    "get_job_by_id": {
+      "execution_ms_each_run": [
+        0.067,
+        0.109,
+        0.046
+      ],
+      "top_node": "Index Scan using jobs_pkey on jobs  (cost=0.43..8.45 rows=1 width=431) (actual time=0.022..0.024 rows=1 loops=1)",
+      "plan": [
+        "Index Scan using jobs_pkey on jobs  (cost=0.43..8.45 rows=1 width=431) (actual time=0.022..0.024 rows=1 loops=1)",
+        "  Index Cond: (id = '5f4f096d-4ba1-46ed-b798-81d9d63fe6eb'::uuid)",
+        "  Buffers: shared hit=4",
+        "Planning Time: 0.110 ms",
+        "Execution Time: 0.046 ms"
+      ]
+    },
+    "attempt_history_for_job": {
+      "execution_ms_each_run": [
+        0.129,
+        0.092,
+        0.099
+      ],
+      "top_node": "Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.42..8.44 rows=1 width=796) (actual time=0.058..0.060 rows=1 loops=1)",
+      "plan": [
+        "Index Scan using uq_job_attempts_job_attempt on job_attempts  (cost=0.42..8.44 rows=1 width=796) (actual time=0.058..0.060 rows=1 loops=1)",
+        "  Index Cond: (job_id = '5f4f096d-4ba1-46ed-b798-81d9d63fe6eb'::uuid)",
+        "  Buffers: shared hit=4",
+        "Planning Time: 0.180 ms",
+        "Execution Time: 0.092 ms"
+      ]
+    }
+  },
+  "metrics_scrape_seconds": [
+    0.7550690999996732,
+    0.9652767000006861,
+    0.7948791999988316
+  ]
+}

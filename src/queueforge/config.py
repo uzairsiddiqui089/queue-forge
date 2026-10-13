@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # Backpressure: how many jobs may wait in the queue. Over the limit, submits are refused.
     max_queued_jobs_per_client: int = Field(10_000, ge=1)
     max_queued_jobs_total: int = Field(100_000, ge=1)
+    # How long the "is the whole queue full?" answer may be reused. Counting a deep queue on
+    # every submit is expensive (measured 44-99 ms at 100k queued); 0 disables the cache.
+    queue_depth_cache_seconds: float = Field(1.0, ge=0)
+    # How long /metrics results may be reused (the big aggregates scan whole tables). 0 = never.
+    metrics_cache_seconds: float = Field(10.0, ge=0)
 
     # Database connections. Budget: (API replicas x (pool + overflow)) + (workers x ~3)
     # must stay below PostgreSQL's max_connections (100 by default).
