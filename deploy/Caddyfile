@@ -1,0 +1,25 @@
+# HTTPS reverse proxy for QueueForge (used by docker-compose.prod.yml, profile `proxy`).
+#
+# Caddy gets and renews a certificate for QUEUEFORGE_DOMAIN by itself. The domain must point
+# at this machine and ports 80 and 443 must be reachable from the internet.
+#
+# NOT TESTED in this repository: the proxy image could not be pulled where this was written.
+# Check it (`docker compose ... --profile proxy config`, then a real request) before relying on it.
+{$QUEUEFORGE_DOMAIN} {
+	# /metrics is for your monitoring on the private network, never the public internet.
+	@internal path /metrics /metrics/* /docs /docs/* /redoc /openapi.json
+	respond @internal 404
+
+	# Same limit as the application (64 KB); the app also enforces it.
+	request_body {
+		max_size 64KB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	reverse_proxy api:8000
+}

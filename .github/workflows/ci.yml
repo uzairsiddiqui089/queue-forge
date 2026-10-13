@@ -46,6 +46,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
       - name: Shell scripts have no syntax errors
         run: shellcheck --severity=error scripts/backup/*.sh scripts/benchmark/*.sh
+      - name: Compose files are valid (including the production override)
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_DB: ci
+          POSTGRES_PASSWORD: ci-only-password
+          REDIS_PASSWORD: ci-only-password
+          QUEUEFORGE_DOMAIN: example.invalid
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile proxy config -q
       - run: uv sync --frozen
       - name: Dependency vulnerability audit (runtime packages)
         run: |

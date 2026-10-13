@@ -142,7 +142,7 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 - No endpoint to create API clients; use the script above. No key rotation or expiry.
 - Backups are snapshots with no point-in-time recovery, and stay beside the database unless you mount another location.
 - Job payloads are stored unencrypted until retention deletes them. Retention deletes data for good (no archive). See [security](docs/security.md).
-- The Compose file is for local development only (ports bound to localhost, no TLS, no Redis password).
+- The default Compose file is for local development (ports bound to localhost, no TLS, no Redis password). `docker-compose.prod.yml` adds production settings and an optional HTTPS proxy; the hardening was tested, the proxy was **not**, and there is no staging or automated deployment (see [docs/deployment.md](docs/deployment.md)).
 - Performance figures exist but come from **one low-end laptop** and are not capacity numbers; see [docs/benchmarking.md](docs/benchmarking.md) for what was measured, what was found and fixed, and the limits. Not yet validated in any production-like environment.
 - **Fairness is approximate beyond 64 clients waiting at once** and means an equal number of running jobs per client, not an equal share of run time. Fair claiming costs a few percent of worker throughput for do-nothing jobs (measured; see [docs/benchmarking.md](docs/benchmarking.md)).
 
