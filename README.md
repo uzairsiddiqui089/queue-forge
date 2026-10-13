@@ -5,41 +5,54 @@ Clients submit jobs over HTTP; separate worker processes claim and execute them
 with at-least-once semantics. It is a learning and portfolio project that
 focuses on correct, explainable backend engineering.
 
-> **Status: Milestone 5 (security and observability).** You can submit jobs, and
-> separate worker processes claim and run them. Failed jobs are retried with
-> backoff, jobs from crashed workers are recovered, and jobs that keep failing are
-> dead-lettered (admins can inspect and re-queue them). The system is
-> **at-least-once**: a job can run more than once (see
-> [architecture](docs/architecture.md)), so handlers must be idempotent.
-> Docs: [project brief](docs/project-brief.md) · [architecture](docs/architecture.md) ·
-> [operations](docs/operations.md) · [security](docs/security.md).
+> **Status:** feature-complete for a single-host deployment: submit, run, retry,
+> recover, dead-letter, rate-limit, observe, clean up and back up. It is **not**
+> validated in production (see [Limitations](#limitations)). The system is
+> **at-least-once**: a job can run more than once, so handlers must be idempotent.
+> Docs: [architecture](docs/architecture.md) · [operations](docs/operations.md) ·
+> [security](docs/security.md) · [benchmarking](docs/benchmarking.md) ·
+> [project brief](docs/project-brief.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+    C[Client] -->|POST /v1/jobs + API key| A[API<br/>FastAPI]
+    A -->|rate limit counters| R[(Redis)]
+    A -->|insert job, commit, then 201| P[(PostgreSQL<br/>source of truth)]
+    W[Workers<br/>N processes] -->|claim: FOR UPDATE SKIP LOCKED<br/>lease + heartbeat| P
+    W -->|result written only if lease_token matches| P
+    M[Maintenance] -->|delete old finished jobs<br/>in small batches| P
+    B[Backup scripts] -->|pg_dump + verify drill| P
+    A -->|GET /metrics, /readyz| O[Operators]
+```
+
+- The API only stores jobs; it never runs them. A job is acknowledged only after it is committed.
+- Workers claim jobs inside PostgreSQL, so two workers cannot take the same job. A claim gives a time-limited lease; a heartbeat renews it, and a sweeper re-queues jobs whose worker died.
+- Retries use exponential backoff with jitter; after 5 attempts a job is dead-lettered and an admin can re-queue it.
+- Redis is used only for rate-limit counters, never for the queue.
 
 ## Implemented
 
-- Backup and restore tools (`scripts/backup/`): consistent backups with checksums, optional encryption and rotation; a restore that will not overwrite the live database; and a `verify`/`drill` command that restores a backup into a throwaway database and checks it (runbook in [docs/operations.md](docs/operations.md))
-- Data retention: a `maintenance` service deletes old finished jobs (and their attempts, idempotency keys, notifications) in small safe batches; queued and running jobs are never touched (details and measurements in [docs/operations.md](docs/operations.md) and [docs/benchmarking.md](docs/benchmarking.md))
-- Fair claiming: workers serve the client with the fewest running jobs first, so one client's backlog no longer blocks the others (a small client's wait behind a 3,000-job backlog fell from about 120 s to 0.06 s in the benchmark)
-- A repeatable benchmark harness (`scripts/benchmark/`) with measured results and findings in [docs/benchmarking.md](docs/benchmarking.md)
-- Structured JSON logs with a field allow-list (payloads, keys and query strings are never logged; tested)
-- `GET /metrics` (Prometheus format, admin key): jobs per state, oldest queued job age, expired leases, attempts by outcome
-- Admin endpoints: list dead-lettered jobs, view a job's attempt history, re-queue a dead-lettered job
-- Per-key rate limiting with Redis (Redis holds only counters; if it is down the API keeps working), 64 KB request body limit, generic `500` errors without stack traces
-
-- Separate worker processes (`python -m queueforge.worker`) that claim jobs safely with `FOR UPDATE SKIP LOCKED`, so no two workers take the same job
-- Four task handlers (`echo`, `sleep`, `flaky`, `simulated_notification`), results and sanitized errors saved, every attempt recorded in `job_attempts`
-- Fenced result writes: a worker that lost its lease cannot overwrite a job
-- Retries: permanent vs temporary errors, exponential backoff with full jitter, 5 attempts, then `dead_lettered`
-- Crash recovery: leases with a heartbeat, plus a sweeper that re-queues jobs from dead workers (tested with a real hard-killed worker process)
-- `POST /v1/jobs` and `GET /v1/jobs/{id}`, with API-key authentication
+**Core**
+- `POST /v1/jobs` and `GET /v1/jobs/{id}` with API-key authentication, per-client isolation (another client's job is `404`) and idempotency keys (same key and body returns the original job for 24 h)
 - Allow-listed task types with validated payloads: `echo`, `sleep`, `flaky`, `simulated_notification`
-- Jobs stored in PostgreSQL (Alembic migrations run automatically in the API container)
-- Idempotency: the same `Idempotency-Key` + same body returns the original job (24 h)
-- Per-client isolation: another client's job returns `404`
-- FastAPI app with `GET /healthz` (liveness) and `GET /readyz` (readiness, checks the database)
-- Environment-based configuration (no secrets in code)
-- Docker Compose stack: PostgreSQL 16, Redis 7, one-time migrations, API and scalable workers
-- Tests (pytest), linting and formatting (Ruff), strict type checking (mypy)
-- GitHub Actions CI running the same checks against a Postgres service container
+- Separate workers (`python -m queueforge.worker`) using `FOR UPDATE SKIP LOCKED`; every attempt recorded in `job_attempts`; fenced result writes so a worker that lost its lease cannot overwrite a job
+- Retries (permanent vs temporary errors, backoff with full jitter), leases with heartbeat, a sweeper for dead workers (tested with a real hard-killed process), dead-lettering and admin re-queue
+
+**Protection and fairness**
+- Per-client and global queue limits (`429`/`503` with `Retry-After`), per-key rate limiting with Redis (fails open), 64 KB body limit, generic `500` errors without stack traces
+- Fair claiming: workers serve the client with the fewest running jobs first (a small client's wait behind a 3,000-job backlog fell from about 120 s to 0.06 s in the benchmark)
+
+**Operations**
+- Structured JSON logs with a field allow-list (payloads and keys are never logged; tested), `GET /metrics` (Prometheus), `/healthz` and `/readyz`
+- Data retention: a `maintenance` service deletes old finished jobs in small safe batches; queued and running jobs are never touched
+- Backup, restore and a restore drill (`scripts/backup/`): checksums, optional encryption, rotation, a restore that will not overwrite the live database, and a `verify` command that proves a backup works (runbook in [docs/operations.md](docs/operations.md))
+- A repeatable benchmark harness (`scripts/benchmark/`); measured results and findings in [docs/benchmarking.md](docs/benchmarking.md)
+
+**Engineering**
+- Environment-based configuration with startup validation (no secrets in code), Alembic migrations, Docker Compose stack (PostgreSQL 16, Redis 7, migrate, API, workers, maintenance)
+- Tests against real PostgreSQL (never SQLite), Ruff, strict mypy, and GitHub Actions CI
 
 ## Prerequisites
 
