@@ -54,6 +54,13 @@ class Job(Base):
             "lease_expires_at",
             postgresql_where=text("status = 'running'"),
         ),
+        # Retention: find the oldest finished jobs of one status past their cutoff, in order.
+        Index(
+            "ix_jobs_finished_status_completed",
+            "status",
+            "completed_at",
+            postgresql_where=text("status IN ('succeeded', 'failed', 'dead_lettered')"),
+        ),
         # The admin dead-letter listing, newest first.
         Index(
             "ix_jobs_dead_lettered_completed",
@@ -90,6 +97,11 @@ class Job(Base):
 
 class IdempotencyKey(Base):
     __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        # Retention deletes expired keys oldest-first, and deletes a job's keys with the job.
+        Index("ix_idempotency_keys_expires_at", "expires_at"),
+        Index("ix_idempotency_keys_job_id", "job_id"),
+    )
 
     # The primary key is what makes concurrent duplicates safe: only one insert wins.
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("api_clients.id"), primary_key=True)

@@ -114,6 +114,53 @@ def db_dsn() -> str:
     return f"postgresql://{user}:{password}@127.0.0.1:{DB_HOST_PORT}/{name}"
 
 
+def purge_sessions() -> Any:
+    """A SQLAlchemy session factory for the benchmark database (the real purge code uses it)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    user, password, name = (
+        os.environ[k] for k in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB")
+    )
+    url = f"postgresql+psycopg://{user}:{password}@127.0.0.1:{DB_HOST_PORT}/{name}"
+    return sessionmaker(create_engine(url, pool_size=2), expire_on_commit=False)
+
+
+class BackgroundPurger:
+    """Runs the real purge back to back while a scenario runs: the WORST case for interference.
+    (The shipped maintenance process is much gentler: one bounded cycle a minute.)"""
+
+    def __init__(self, days: int, batch_size: int) -> None:
+        from queueforge.services.retention import RetentionPolicy
+
+        self._policy = RetentionPolicy(
+            succeeded_days=days, failed_days=days, dead_letter_days=days, batch_size=batch_size
+        )
+        self._sessions = purge_sessions()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self.rows = 0
+        self.jobs = 0
+
+    def _run(self) -> None:
+        from queueforge.services.retention import run_purge_cycle
+
+        while not self._stop.is_set():
+            result = run_purge_cycle(self._sessions, self._policy, max_batches=5)
+            self.rows += result.total_rows
+            self.jobs += result.jobs
+            if not result.more_to_do and result.total_rows == 0:
+                self._stop.wait(0.5)
+
+    def __enter__(self) -> "BackgroundPurger":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=60)
+
+
 def connect() -> psycopg.Connection[Any]:
     return psycopg.connect(db_dsn(), autocommit=True)
 
@@ -710,11 +757,20 @@ def scenario_drain(args: argparse.Namespace) -> None:
         tables_before = table_stats(conn)
         for i in range(args.repeat):
             reset_data(conn, args.keep_history)
+            purger = (
+                BackgroundPurger(args.purge_days, args.purge_batch)
+                if args.purge_concurrently
+                else None
+            )
             with StatsSampler() as sampler:
+                if purger:
+                    purger.__enter__()
                 ids = insert_queued(conn, client_id, args.jobs, args.kind)
                 conn.execute("ANALYZE jobs")
                 drained = wait_drain(conn, ids, args.drain_timeout)
                 containers = sampler.summary()
+                if purger:
+                    purger.__exit__(None, None, None)
             metrics = job_metrics(conn, ids)
             window = conn.execute(
                 "SELECT extract(epoch FROM max(finished_at) - min(started_at)) "
@@ -732,6 +788,7 @@ def scenario_drain(args: argparse.Namespace) -> None:
                 "drain_seconds_first_start_to_last_finish": float(window),
                 "drain_jobs_per_second": args.jobs / float(window) if window else None,
                 "jobs_per_worker": sorted(per_worker.values()),
+                "purged_during_run": {"jobs": purger.jobs, "rows": purger.rows} if purger else None,
                 "jobs": metrics,
                 "containers": containers,
             }
@@ -1077,6 +1134,60 @@ def scenario_plans(args: argparse.Namespace) -> None:
         conn.execute("DELETE FROM jobs WHERE client_id = %s", (plans_client,))
 
 
+def scenario_purge(args: argparse.Namespace) -> None:
+    """Run the real purge over the preloaded history; measure speed and what it leaves behind."""
+    from queueforge.services.retention import RetentionPolicy, count_eligible, run_purge_cycle
+
+    ensure_stack(0)
+    sessions = purge_sessions()
+    policy = RetentionPolicy(
+        succeeded_days=args.days, failed_days=args.days, dead_letter_days=args.days,
+        batch_size=args.batch_size,
+    )  # fmt: skip
+    with connect() as conn:
+        tables_before = table_stats(conn)
+        with sessions() as session:
+            eligible = count_eligible(session, policy)
+        print(f"  eligible before: {eligible}")
+        cycles: list[dict[str, Any]] = []
+        started = time.perf_counter()
+        while True:
+            t0 = time.perf_counter()
+            result = run_purge_cycle(sessions, policy, max_batches=args.batches_per_cycle)
+            seconds = time.perf_counter() - t0
+            if result.total_rows == 0:
+                break
+            cycles.append(
+                {"jobs": result.jobs, "rows": result.total_rows, "batches": result.batches, "seconds": seconds}
+            )  # fmt: skip
+            if len(cycles) % 5 == 0:
+                done = sum(c["jobs"] for c in cycles)
+                print(f"  {done} jobs deleted, {time.perf_counter() - started:.0f}s", flush=True)
+        total_seconds = time.perf_counter() - started
+        tables_after_purge = table_stats(conn)
+        conn.execute("VACUUM (ANALYZE) jobs, job_attempts")
+        tables_after_vacuum = table_stats(conn)
+        jobs = sum(c["jobs"] for c in cycles)
+        rows = sum(c["rows"] for c in cycles)
+        batch_ms = [1000 * c["seconds"] / c["batches"] for c in cycles if c["batches"]]
+        print(
+            f"  purged {jobs} jobs ({rows} rows) in {total_seconds:.0f}s = {jobs / total_seconds:.0f} jobs/s; "
+            f"per-batch ms p50={pct(batch_ms, 50):.0f} p95={pct(batch_ms, 95):.0f} max={max(batch_ms):.0f}"
+        )  # fmt: skip
+        save(
+            "purge", args.label,
+            {
+                "parameters": vars(args), "eligible_before": eligible,
+                "jobs_purged": jobs, "rows_purged": rows, "seconds": total_seconds,
+                "jobs_per_second": jobs / total_seconds if total_seconds else None,
+                "batch_milliseconds": summarize(batch_ms),
+                "tables_before": tables_before, "tables_after_purge": tables_after_purge,
+                "tables_after_vacuum": tables_after_vacuum,
+            },
+            conn,
+        )  # fmt: skip
+
+
 def scenario_claimcost(args: argparse.Namespace) -> None:
     """How much does picking a client fairly cost, compared with plain oldest-first?"""
     from queueforge.worker.claims import _PICK_FAIR_CLIENT_SQL
@@ -1199,6 +1310,9 @@ def main() -> None:
     )
     drain_cmd.add_argument("--keep-history", action="store_true")
     drain_cmd.add_argument("--clients", type=int, default=1)
+    drain_cmd.add_argument("--purge-concurrently", action="store_true")
+    drain_cmd.add_argument("--purge-days", type=int, default=1)
+    drain_cmd.add_argument("--purge-batch", type=int, default=1000)
     drain_cmd.add_argument("--vacuum-first", action="store_true")
     drain_cmd.add_argument("--without-new-indexes", action="store_true")
     add("fairness", scenario_fairness, workers=4, backlog=3000, b_jobs=20, concurrency=16,
@@ -1210,6 +1324,7 @@ def main() -> None:
     add("preload", scenario_preload, rows=1_000_000)
     add("plans", scenario_plans, queued=20_000, repeat=3)
     add("scrape", scenario_scrape, repeat=5, workers=0)
+    add("purge", scenario_purge, days=1, batch_size=1000, batches_per_cycle=50)
     cc = add("claimcost", scenario_claimcost, repeat=5, jobs_per_client=50)
     cc.add_argument("--client-counts", type=int, nargs="+", default=[1, 10, 100, 1000])
 

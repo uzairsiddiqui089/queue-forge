@@ -15,3 +15,7 @@ services:
     environment:
       # Set BENCH_REDIS_URL to an empty string to run WITHOUT the rate limiter.
       REDIS_URL: ${BENCH_REDIS_URL-redis://redis:6379/0}
+  # Not part of the benchmark stack: it would delete the preloaded history on its own schedule
+  # and distort the measurements. The purge scenarios run the purge code explicitly instead.
+  maintenance:
+    profiles: ["not-in-benchmarks"]

@@ -11,6 +11,7 @@ How to run QueueForge, see what it is doing, and fix it when something goes wron
 | API | `api` service | 1 or more (stateless) |
 | Worker | `worker` service | 1 or more; `docker compose up -d --scale worker=4` |
 | Redis | `redis` service | 1 (rate limiting only; optional) |
+| Maintenance | `maintenance` service | 1 (deletes old finished jobs; see "Data retention") |
 
 ## Configuration
 
@@ -33,6 +34,8 @@ All settings are environment variables. Copy `.env.example` to `.env` and edit i
 | `MAX_QUEUED_JOBS_PER_CLIENT`, `MAX_QUEUED_JOBS_TOTAL` | 10000, 100000 | Backpressure limits; over them, submits get `429` / `503`. The per-client cap is exact (advisory lock); the global cap is a soft limit that can be exceeded slightly under simultaneous submits |
 | `FAIR_CLAIMING` | true | Workers serve the client with the fewest running jobs first. `false` = oldest job overall first (the earlier behaviour) |
 | `FAIR_CLAIM_MAX_CLIENTS` | 64 | How many waiting clients are compared per claim. Higher costs more per claim (about 23 ms at 1,000 clients) |
+| `RETENTION_SUCCEEDED_DAYS`, `RETENTION_FAILED_DAYS`, `RETENTION_DEAD_LETTER_DAYS` | 7, 30, 30 | How long finished jobs are kept before the maintenance process deletes them (see "Data retention") |
+| `PURGE_BATCH_SIZE`, `PURGE_MAX_BATCHES_PER_CYCLE`, `MAINTENANCE_INTERVAL_SECONDS` | 1000, 50, 60 | Jobs deleted per transaction, the most batches in one cycle (so one cycle deletes at most 50,000 jobs), and the pause between cycles |
 | `QUEUE_DEPTH_CACHE_SECONDS` | 1 | How long the "is the whole queue full?" answer is reused. Counting a deep queue on every submit cost about 48 ms at 100,000 queued jobs. 0 = count every time |
 | `METRICS_CACHE_SECONDS` | 10 | How long `/metrics` results are reused (two queries scan whole tables; a scrape took 0.7-4.4 s with 1,000,000 jobs). The numbers can be up to this many seconds old. 0 = never |
 | `WORKER_SHUTDOWN_DRAIN_SECONDS` | 25 | How long a stopping worker lets its job finish before handing it back. Keep Docker's `stop_grace_period` (40 s) above it |
@@ -80,10 +83,46 @@ Useful messages: `job claimed`, `job recorded` (with `new_status`), `lease lost`
 | `queueforge_oldest_queued_job_age_seconds` | How long the longest-waiting ready job has waited. **Rising = not enough workers, or workers are down** |
 | `queueforge_oldest_running_job_age_seconds` | Longest current attempt. Very large = a stuck handler |
 | `queueforge_expired_leases` | Jobs whose worker stopped renewing and are not yet recovered. **More than 0 for long = no sweeper running (all workers down)** |
+| `queueforge_oldest_finished_job_age_seconds` | Age of the oldest finished job still stored. **Alert when it is more than a day above your longest retention period** (default 30 days): the maintenance process has stopped deleting |
 | `queueforge_workers_alive` | Worker processes seen in the last 30 s. **Alert when this is 0 for more than a minute**: nothing is running jobs or recovering crashed ones |
 | `queueforge_job_attempts_total{outcome="..."}` | Total attempts by result: `succeeded`, `retryable_error`, `permanent_error`, `lease_expired` |
 
 Things worth alerting on: `queueforge_jobs{status="dead_lettered"}` growing; oldest queued age above what your users accept; expired leases above 0 for more than a minute or two.
+
+## Data retention (cleanup)
+
+Without cleanup the database only grows. Measured with 1,000,000 finished jobs: every worker's lease sweep scanned the whole table, `/metrics` took seconds, and throughput was 25-35% lower (see [benchmarking.md](benchmarking.md)). The `maintenance` service deletes old data continuously.
+
+**What is deleted**
+
+| Data | When it is deleted |
+|---|---|
+| `succeeded` jobs | more than `RETENTION_SUCCEEDED_DAYS` (7) after they finished |
+| `failed` jobs | more than `RETENTION_FAILED_DAYS` (30) after they finished |
+| `dead_lettered` jobs | more than `RETENTION_DEAD_LETTER_DAYS` (30) after they were dead-lettered |
+| A deleted job's attempts, idempotency keys and notification rows | with the job, in the same statement |
+| Idempotency keys | once their 24-hour window has passed |
+| Worker presence rows | not seen for a day |
+
+**What is never deleted:** jobs that are still `queued` or `running`, however old. Clients that look up a deleted job get `404` from then on, so keep retention longer than the longest time any client may look at a result. There is **no archive**: deleted means gone (restoring from a backup is the only way back).
+
+**How it works.** Every `MAINTENANCE_INTERVAL_SECONDS` (60 s) it deletes up to `PURGE_MAX_BATCHES_PER_CYCLE` batches of `PURGE_BATCH_SIZE` jobs, oldest first, each batch in its own short transaction. If a cycle hit its limit it runs again after one second until it has caught up. Rows locked by someone else at that moment (for example an admin re-queueing a dead-lettered job) are skipped and picked up next time, and several purgers can run together safely. An unexpected error makes it back off and retry rather than die; the container has a healthcheck.
+
+**Look before you delete** (changes nothing):
+
+```bash
+docker compose run --rm maintenance python -m queueforge.maintenance --dry-run
+```
+
+**Run one purge by hand** (until nothing eligible is left, then exit):
+
+```bash
+docker compose run --rm maintenance python -m queueforge.maintenance --once
+```
+
+**Disk space.** Deleted rows leave space that PostgreSQL reuses; the files do not shrink on their own. Autovacuum (default settings) cleans up the dead rows. After a very large one-off purge you can reclaim disk space with `VACUUM FULL jobs, job_attempts`, but it **locks the tables while it runs**, so do that in a maintenance window.
+
+**Changing retention.** Lowering a period makes the next cycles delete everything now older than it, which can be a lot: run `--dry-run` first.
 
 ## Admin tasks
 
@@ -139,6 +178,8 @@ Each API key gets `RATE_LIMIT_PER_MINUTE` requests per calendar minute. Over the
 | API returns `503` with `Retry-After` | Database unreachable, or all connections busy | `/readyz`; DB health; pool settings and the connection budget |
 | `POST /v1/jobs` returns `429` "Too many queued jobs" | That client has too many waiting jobs | Add workers or slow the client; `Retry-After` says when to try again |
 | `POST /v1/jobs` returns `503` "Queue is full" | The whole queue is at its limit | Add workers; check for stuck or missing workers first |
+| `queueforge_oldest_finished_job_age_seconds` keeps growing | The maintenance process stopped (or cannot keep up) | `docker compose ps maintenance`; its logs ("purge cycle" lines, "purge cycle failed"); `--dry-run` shows how much is waiting. If it cannot keep up, raise `PURGE_MAX_BATCHES_PER_CYCLE` |
+| A client gets `404` for an old job | The job passed its retention period and was deleted | Raise the `RETENTION_*_DAYS` setting; deleted jobs cannot be recovered except from a backup |
 | Worker logs "worker loop error; backing off" | An unexpected error (often the database) | The worker keeps retrying with growing waits; a "worker recovered" line follows when it works again |
 | Job is `dead_lettered` | It failed 5 times (or its worker died 5 times) | Admin job detail shows each attempt; fix the cause, then `requeue` |
 | Job `failed` with `TaskError` | A permanent error: the input can never work | Fix the input and submit a new job |
@@ -152,7 +193,7 @@ Each API key gets `RATE_LIMIT_PER_MINUTE` requests per calendar minute. Over the
 ## Known operational limits
 
 - Single PostgreSQL instance: it is the queue and the only source of truth. Throughput is limited by it (Milestone 6 will measure this).
-- No automatic cleanup of old jobs, attempts or expired idempotency keys.
+- Cleanup deletes data for good (no archive), and does not shrink the database files on its own (see "Data retention").
 - The sweeper runs inside workers: no workers means no recovery (watch `queueforge_workers_alive`).
 - Fair claiming compares at most `FAIR_CLAIM_MAX_CLIENTS` (64) waiting clients per claim; with more, fairness is approximate (the 64 lowest client ids are compared). It balances the NUMBER of running jobs per client, not run time. It costs a few percent of worker throughput for do-nothing jobs (see `docs/benchmarking.md`).
 - Performance figures come from a single low-end laptop (see `docs/benchmarking.md`); size the queue caps as throughput x the longest wait you accept, because the defaults allow hours of waiting at low throughput.

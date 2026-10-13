@@ -67,6 +67,17 @@ class Settings(BaseSettings):
     # The worker touches this file regularly; the container healthcheck reads its age.
     worker_liveness_file: str = "/tmp/queueforge-worker-alive"  # noqa: S108
 
+    # Retention: how long FINISHED jobs are kept before the maintenance process deletes them
+    # (with their attempts, idempotency keys and notifications). Queued/running jobs are never
+    # deleted. A deleted job answers 404 from then on.
+    retention_succeeded_days: int = Field(7, ge=1)
+    retention_failed_days: int = Field(30, ge=1)
+    retention_dead_letter_days: int = Field(30, ge=1)
+    purge_batch_size: int = Field(1000, ge=1, le=10_000)  # jobs per transaction
+    purge_max_batches_per_cycle: int = Field(50, ge=1)  # bounds one cycle's work
+    maintenance_interval_seconds: float = Field(60.0, gt=0)
+    maintenance_liveness_file: str = "/tmp/queueforge-maintenance-alive"  # noqa: S108
+
     # Fair claiming: workers serve the client with the fewest running jobs first, so one
     # client's big backlog does not delay everyone else. Turn off for oldest-first overall.
     fair_claiming: bool = True

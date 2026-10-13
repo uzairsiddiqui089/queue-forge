@@ -30,7 +30,7 @@ This is a demonstration project. These notes say what it protects against, what 
 
 - **No TLS, no key rotation, no key expiry.** To rotate a key, create a new client and disable the old one (`disabled_at`).
 - **No per-IP limiting.** Rate limits are per API key, so unauthenticated floods are not limited.
-- **Payloads are stored unencrypted.** Do not put real secrets or personal data in jobs.
+- **Payloads are stored unencrypted** (in the database and its backups) until retention deletes the job: 7 days after success, 30 days after failure by default. Do not put real secrets or personal data in jobs.
 - **Exception text in logs.** Stack traces can contain whatever an exception message contains. Protect log access.
 - **Redis has no password locally.** In production use a password and TLS, and keep it off public networks.
 - **The rate limiter fails open.** During a Redis outage there is no limit. This is a deliberate trade-off (availability over protection).

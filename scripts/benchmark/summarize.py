@@ -78,6 +78,8 @@ def setup(p: dict[str, Any], environment: dict[str, Any] | None = None) -> str:
         parts.append("new indexes dropped")
     if p.get("clients", 1) > 1:
         parts.append(f"{p['clients']} clients")
+    if p.get("purge_concurrently"):
+        parts.append("purge running flat out in the background")
     claiming = (environment or {}).get("application_settings", {}).get("FAIR_CLAIMING")
     if claiming is not None:
         parts.append(
@@ -113,6 +115,31 @@ def drain() -> None:
             f"| {r['label']} | {p['workers']} | {p['kind']} | {setup(p, r.get('environment'))} | {len(runs)} | {spread(rates)} "
             f"| {spread_share} | {errs} / {extra} | {f(db, 0)} / {f(wk, 0)} |"
         )
+
+
+def purge() -> None:
+    for r in load("purge"):
+        section("Purging old jobs (the real purge code, 1,000 jobs per batch)")
+        batch = r["batch_milliseconds"]
+        print(
+            f"Run `{r['label']}`: {r['jobs_purged']} jobs ({r['rows_purged']} rows including their "
+            f"attempts) in {r['seconds']:.1f} s = **{r['jobs_per_second']:.0f} jobs/s**; time per "
+            f"batch p50 / p95 / max = {f(batch['p50'], 0)} / {f(batch['p95'], 0)} / {f(batch['max'], 0)} ms.\n"
+        )
+        print(
+            "| Moment | jobs table: live rows | dead rows | size (MB) | attempts table: live rows | dead rows | size (MB) |"
+        )
+        print("|---|---|---|---|---|---|---|")
+        for key, label in (
+            ("tables_before", "before the purge"),
+            ("tables_after_purge", "right after the purge"),
+            ("tables_after_vacuum", "after VACUUM"),
+        ):
+            j, a = r[key]["jobs"], r[key]["job_attempts"]
+            print(
+                f"| {label} | {j['live_rows']} | {j['dead_rows']} | {j['total_bytes'] / 1e6:.0f} "
+                f"| {a['live_rows']} | {a['dead_rows']} | {a['total_bytes'] / 1e6:.0f} |"
+            )
 
 
 def idle() -> None:
@@ -307,7 +334,18 @@ def history() -> None:
 
 
 def main() -> None:
-    for fn in (submit_only, drain, idle, fairness, claimcost, overload, steady, soak, history):
+    for fn in (
+        submit_only,
+        drain,
+        idle,
+        fairness,
+        claimcost,
+        overload,
+        steady,
+        soak,
+        history,
+        purge,
+    ):
         fn()
 
 
