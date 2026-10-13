@@ -80,7 +80,7 @@ Rule for future migrations: make them **backward compatible for one release** (a
 
 - **No automated deployment pipeline** (CD): it needs a server and credentials, which this project does not have. The steps above are manual.
 - **No staging environment.** To rehearse, run a second copy with a different Compose project name (`-p`) and its own `.env`; restore a backup into it before you try a risky release.
-- **No container image scanning or automatic dependency updates** in CI. Runtime dependencies are audited with `pip-audit` on every CI run; image scanning and Dependabot are not enabled.
+- **Supply chain:** runtime dependencies are audited with `pip-audit`, and the built container image is scanned by Trivy (HIGH and CRITICAL vulnerabilities with an available fix fail CI) on every run. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image; a person merges them. This catches known problems only. Not covered: signing images, publishing an image registry, and GitHub-side settings such as branch protection and secret scanning (these are repository settings, not files, and are not changed here).
 - **Secrets are in a `.env` file**, not a secrets manager; there is no key rotation procedure beyond creating a new client and disabling the old one.
 - **Single server, single database**: no failover. A server loss means restoring from backups elsewhere.
 - Resource limits (memory, CPU) are not set because no sizing data exists beyond the laptop benchmarks in [benchmarking](benchmarking.md).

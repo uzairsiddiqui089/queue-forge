@@ -72,3 +72,20 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://ci:ci-only-password@localhost:5432/queueforge_test
       - run: uv run pytest
+
+  # Builds the real container image and scans it (operating-system packages and Python
+  # libraries) for known vulnerabilities that already have a fix. HIGH and CRITICAL fail the job.
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build the image
+        run: docker build -t queueforge:ci .
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: queueforge:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          vuln-type: os,library
