@@ -142,6 +142,28 @@ def purge() -> None:
             )
 
 
+def backup_drill() -> None:
+    for r in load("backup-drill"):
+        section("Backup and verified restore")
+        jobs = r["tables"]["jobs"]["live_rows"]
+        attempts = r["tables"]["job_attempts"]["live_rows"]
+        print(
+            f"Database: {jobs} jobs and {attempts} attempts, {r['database_bytes'] / 1e6:.0f} MB on disk.\n"
+        )
+        print(
+            "| Kind | Run | Backup file (MB) | Backup (s) | Restore into a scratch database (s) | Whole verify (s) | Verified OK |"
+        )
+        print("|---|---|---|---|---|---|---|")
+        counters: dict[str, int] = {}
+        for row in r["results"]:
+            counters[row["kind"]] = counters.get(row["kind"], 0) + 1
+            print(
+                f"| {row['kind']} | {counters[row['kind']]} | {row['backup_file_mb']:.1f} "
+                f"| {row['backup_seconds']} | {row['restore_seconds']} | {row['verify_total_seconds']} "
+                f"| {'yes' if row['verify_ok'] else 'NO'} |"
+            )
+
+
 def idle() -> None:
     for r in load("idle-latency"):
         section("Idle pickup latency (one job at a time into an idle system)")

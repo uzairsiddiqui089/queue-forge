@@ -124,6 +124,54 @@ docker compose run --rm maintenance python -m queueforge.maintenance --once
 
 **Changing retention.** Lowering a period makes the next cycles delete everything now older than it, which can be a lot: run `--dry-run` first.
 
+## Backups and restore
+
+PostgreSQL holds everything, so losing it loses everything. The scripts in `scripts/backup/` take consistent backups, restore them safely, and **prove that a backup works** by restoring it into a throwaway database and checking it.
+
+**What a backup is.** A full copy of the database taken with `pg_dump` (one consistent snapshot; it does not block the API or the workers). It contains job payloads and results, attempt history, idempotency keys and the *hashes* of API keys (never the keys themselves). That is sensitive data: backup files are created readable by their owner only, and can be encrypted (below).
+
+**Taking backups**
+
+```bash
+docker compose --profile tools run --rm dbtools backup
+```
+
+This writes `queueforge-<database>-<UTC time>.dump`, a `.sha256` checksum and a `.manifest` (schema version and row counts) to the `backups` volume, checks the dump can be read back, and deletes all but the newest `BACKUP_KEEP` (7). A failure leaves no half-written backup and exits non-zero, so a scheduler can alert on it. To list them: `docker compose --profile tools run --rm dbtools list`.
+
+- **Schedule it yourself.** Compose has no scheduler. For example, nightly at 02:00 with cron: `0 2 * * * cd /path/to/queue-forge && docker compose --profile tools run --rm -T dbtools backup`.
+- **Keep copies somewhere else.** The default `backups` volume sits on the same disk as the database, so it does *not* survive losing the machine. Mount a path on another machine or disk instead, or copy the files off after each run.
+- **Encryption (optional).** Set `BACKUP_PASSPHRASE` and the backup file is encrypted (AES-256 via openssl) and the plain copy is never left behind. Store the passphrase separately and safely: **without it an encrypted backup cannot be restored**, and nobody can recover it for you.
+
+**What you can recover to (read this).** A backup is a snapshot: restoring it brings back the database **as it was when the backup was taken**, and everything after that is lost. With a nightly backup you can lose up to 24 hours of jobs. The 5-minute recovery target set when the roadmap was planned is **not met** by this; reaching it needs *point-in-time recovery* (continuous WAL archiving, or a managed PostgreSQL service that provides it), which is **not built here**.
+
+**How long a restore takes (RTO).** Measured on the benchmark laptop with 1,000,000 jobs and as many attempts: see section 3.10 of [benchmarking.md](benchmarking.md). Your hardware will differ; measure your own with the drill below.
+
+**Prove your backups work (do this on a schedule, for example weekly)**
+
+```bash
+docker compose --profile tools run --rm dbtools drill            # back up now, then verify that backup
+docker compose --profile tools run --rm dbtools verify /backups/<file>   # verify an existing backup
+```
+
+`verify` restores the backup into a throwaway database and checks: the checksum, that the restore succeeds as a whole, that the schema version matches the manifest, that every table's row count lies between the counts recorded just before and just after the dump, and that every constraint is valid. It prints `VERIFY OK` and exits 0, or says what failed and exits 1. It then deletes the throwaway database.
+
+**Disaster recovery: restoring from a backup**
+
+1. **Stop everything that writes:** `docker compose stop api worker maintenance`.
+2. **Choose the backup:** the newest one that verifies (`dbtools list`, then `dbtools verify <file>`).
+3. **Restore into a NEW database** (it will not overwrite anything): `docker compose --profile tools run --rm dbtools restore /backups/<file> --into queueforge_recovered`. Add `-e BACKUP_PASSPHRASE=...` if encrypted.
+4. **Check it** (`dbtools verify <file>` has already done the automated checks; look at a few rows if you like).
+5. **Switch over.** Either point the services at the new database (change `POSTGRES_DB`/`DATABASE_URL`), or replace the original in place. The in-place route deletes the target database, so it needs an explicit confirmation and refuses while anything is still connected: `docker compose --profile tools run --rm -e CONFIRM_REPLACE=yes-replace-the-database dbtools restore /backups/<file> --into <name> --replace`.
+6. **Bring the system back:** `docker compose up -d` (the `migrate` step upgrades the schema if the backup is older than the code). Check `/readyz`, `queueforge_workers_alive` and the queue metrics.
+
+**What a restore means for your data, in plain terms**
+- **Jobs that finished after the backup will run again.** In the restored data they are still queued or running. QueueForge is at-least-once, so task handlers must tolerate this (that is already a requirement).
+- **Jobs submitted after the backup are gone, and so are their idempotency keys.** A client retrying such a submit creates a new job; if the original was lost this is what you want, but a duplicate is possible if the client had already seen it succeed elsewhere.
+- **Jobs that were `running` at backup time** have stale leases; the workers' sweeper recovers them once the lease time has passed.
+- **API clients created after the backup are gone.** Their keys stop working; create them again.
+
+**Limits.** Backups restore the whole database or nothing (there is no restore of a single job). The default location is on the same host. Backups taken while the system is busy contain whatever was committed at one instant, which is consistent but may include jobs mid-flight (see above). Nothing here backs up Redis (it holds only rate-limit counters, which do not matter after a restore) or your `.env` file (keep your secrets in your own secret store).
+
 ## Admin tasks
 
 Create a client or admin (the key is shown once):
@@ -179,6 +227,9 @@ Each API key gets `RATE_LIMIT_PER_MINUTE` requests per calendar minute. Over the
 | `POST /v1/jobs` returns `429` "Too many queued jobs" | That client has too many waiting jobs | Add workers or slow the client; `Retry-After` says when to try again |
 | `POST /v1/jobs` returns `503` "Queue is full" | The whole queue is at its limit | Add workers; check for stuck or missing workers first |
 | `queueforge_oldest_finished_job_age_seconds` keeps growing | The maintenance process stopped (or cannot keep up) | `docker compose ps maintenance`; its logs ("purge cycle" lines, "purge cycle failed"); `--dry-run` shows how much is waiting. If it cannot keep up, raise `PURGE_MAX_BATCHES_PER_CYCLE` |
+| `dbtools verify` or `restore` says "checksum mismatch" | The backup file was damaged or changed after it was written | Do not use it; verify an older one. This is why backups are verified regularly and copied elsewhere |
+| `dbtools restore` says "is the live database" or "already exists" | Restore will not overwrite anything by default | Restore into a new name with `--into`, or use `--replace` with the confirmation (see "Disaster recovery") |
+| A backup run exits non-zero | The dump failed (database unreachable, disk full, ...) | The message says why; no partial backup is left. Alert on a failed or missing backup |
 | A client gets `404` for an old job | The job passed its retention period and was deleted | Raise the `RETENTION_*_DAYS` setting; deleted jobs cannot be recovered except from a backup |
 | Worker logs "worker loop error; backing off" | An unexpected error (often the database) | The worker keeps retrying with growing waits; a "worker recovered" line follows when it works again |
 | Job is `dead_lettered` | It failed 5 times (or its worker died 5 times) | Admin job detail shows each attempt; fix the cause, then `requeue` |
@@ -192,6 +243,7 @@ Each API key gets `RATE_LIMIT_PER_MINUTE` requests per calendar minute. Over the
 
 ## Known operational limits
 
+- Backups are snapshots: recovery loses everything since the last backup, and there is no point-in-time recovery (see "Backups and restore"). They are stored beside the database unless you mount another location.
 - Single PostgreSQL instance: it is the queue and the only source of truth. Throughput is limited by it (Milestone 6 will measure this).
 - Cleanup deletes data for good (no archive), and does not shrink the database files on its own (see "Data retention").
 - The sweeper runs inside workers: no workers means no recovery (watch `queueforge_workers_alive`).
