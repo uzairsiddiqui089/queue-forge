@@ -1,0 +1,41 @@
+# Optional: continuous WAL archiving for point-in-time recovery.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.pitr.yml up -d
+#
+# PostgreSQL copies every finished write-ahead-log (WAL) file to the `wal_archive` volume, and
+# a segment is closed at least every `archive_timeout` seconds, so after a disaster you lose
+# at most about that much recent data (plus any WAL not yet copied). Keep the archive and the
+# base backups on a DIFFERENT disk or machine than the database, or they die with it: change
+# the two volumes below to point somewhere else. See "Point-in-time recovery" in
+# docs/operations.md.
+services:
+  wal-archive-init:
+    image: postgres:16
+    user: root
+    # The archive folder must be writable by the postgres user inside the db container.
+    command: ["chown", "-R", "postgres:postgres", "/wal_archive", "/backups"]
+    volumes:
+      - wal_archive:/wal_archive
+      - backups:/backups
+    restart: "no"
+
+  db:
+    depends_on:
+      wal-archive-init:
+        condition: service_completed_successfully
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      # Never overwrite an archived file; a failing copy is retried by PostgreSQL.
+      - archive_command=test ! -f /wal_archive/%f && cp %p /wal_archive/%f
+      - -c
+      - archive_timeout=60
+    volumes:
+      - wal_archive:/wal_archive
+      - backups:/backups
+      - ./scripts/pitr:/pitr:ro
+
+volumes:
+  wal_archive:
