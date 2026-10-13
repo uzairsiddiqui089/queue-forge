@@ -1,0 +1,30 @@
+# Example Prometheus configuration for QueueForge. Copy it, and adjust the address.
+#
+# /metrics needs an ADMIN API key (header X-API-Key). Create a separate admin client just for
+# scraping (`python scripts/create_client.py prometheus --admin`), put its key in a file that
+# only Prometheus can read, and never commit that file. `http_headers` with `files:` needs
+# Prometheus 2.55 or newer.
+#
+# Not verified against a running Prometheus in this repository (only the rules file is
+# checked, by a unit test): treat this as a starting point and test it.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: queueforge
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+    http_headers:
+      X-API-Key:
+        files: ["/etc/prometheus/secrets/queueforge_scrape_key"]
+
+# Tell Prometheus where to send alerts (an Alertmanager you run) if you want notifications:
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
