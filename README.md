@@ -48,6 +48,7 @@ flowchart LR
 **Operations**
 - Structured JSON logs with a field allow-list (payloads and keys are never logged; tested), `GET /metrics` (Prometheus), `/healthz` and `/readyz`
 - Data retention: a `maintenance` service deletes old finished jobs in small safe batches; queued and running jobs are never touched
+- Optional point-in-time recovery (`scripts/pitr/`, `docker-compose.pitr.yml`): WAL archiving plus base backups, restore to a chosen moment, and a drill that deletes data and recovers it
 - Backup, restore and a restore drill (`scripts/backup/`): checksums, optional encryption, rotation, a restore that will not overwrite the live database, and a `verify` command that proves a backup works (runbook in [docs/operations.md](docs/operations.md))
 - A repeatable benchmark harness (`scripts/benchmark/`); measured results and findings in [docs/benchmarking.md](docs/benchmarking.md)
 
@@ -140,7 +141,7 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 - Retry settings are global (env vars), not per task type. Task time limits are set per task type in code.
 - Rate limiting fails open: if Redis is down there is no limit (a deliberate trade-off, see [operations](docs/operations.md)). Failed logins are not rate limited.
 - No endpoint to create API clients; use the script above. No key rotation or expiry.
-- Backups are snapshots with no point-in-time recovery, and stay beside the database unless you mount another location.
+- Plain backups are snapshots. Optional point-in-time recovery (WAL archiving, `docker-compose.pitr.yml`) can recover to a chosen moment, losing about a minute at most plus unarchived WAL; it was drilled on a tiny database only, and both kinds of backup stay beside the database unless you mount another location.
 - Job payloads are stored unencrypted until retention deletes them. Retention deletes data for good (no archive). See [security](docs/security.md).
 - The Compose file is for local development only (ports bound to localhost, no TLS, no Redis password).
 - Performance figures exist but come from **one low-end laptop** and are not capacity numbers; see [docs/benchmarking.md](docs/benchmarking.md) for what was measured, what was found and fixed, and the limits. Not yet validated in any production-like environment.
