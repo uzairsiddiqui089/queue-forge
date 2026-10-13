@@ -39,8 +39,14 @@ class Job(Base):
         CheckConstraint(f"status IN ({_STATUS_LIST})", name="ck_jobs_status"),
         # Workers (Milestone 3) look for the next queued job by run_at.
         Index("ix_jobs_queued_run_at", "run_at", postgresql_where=text("status = 'queued'")),
-        # Lets the per-client queue cap count a client's waiting jobs without scanning its history.
-        Index("ix_jobs_client_queued", "client_id", postgresql_where=text("status = 'queued'")),
+        # Per client: lets the queue cap count a client's waiting jobs, and fair claiming find a
+        # client's oldest runnable job, without scanning history. Replaces ix_jobs_client_queued.
+        Index(
+            "ix_jobs_client_queued_run_at",
+            "client_id",
+            "run_at",
+            postgresql_where=text("status = 'queued'"),
+        ),
         # The lease sweeper looks for running jobs whose lease has expired (measured: 230+ ms
         # without this index at 1M rows, under 1 ms with it).
         Index(

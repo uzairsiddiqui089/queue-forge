@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import Integer, func, select, update
+from sqlalchemy import Integer, func, select, text, update
 from sqlalchemy.orm import Session
 
 from queueforge.db.models import Job, JobAttempt
@@ -35,17 +35,93 @@ class ClaimedJob:
     lease_token: uuid.UUID
 
 
-def claim_next_job(session: Session, worker_id: str, lease_seconds: int) -> ClaimedJob | None:
-    """Claim the oldest runnable job, or return None if there is none."""
-    assert can_transition(JobStatus.QUEUED, JobStatus.RUNNING)
+# Fair claiming, step 1: choose WHICH CLIENT to serve next.
+#
+# The first CTE lists the clients that have runnable queued jobs, one index lookup per client
+# (a "loose index scan": jump from one client_id to the next instead of reading every job),
+# looking at no more than :max_clients of them. The second counts each client's running jobs
+# (only a handful of rows exist in the `running` state). The client with the FEWEST running
+# jobs wins; ties go to the client whose oldest runnable job has waited longest.
+_PICK_FAIR_CLIENT_SQL = text(
+    """
+    WITH RECURSIVE clients(client_id, depth) AS (
+        (SELECT client_id, 1 FROM jobs
+         WHERE status = 'queued' AND run_at <= now()
+         ORDER BY client_id LIMIT 1)
+        UNION ALL
+        SELECT (SELECT j.client_id FROM jobs j
+                WHERE j.status = 'queued' AND j.run_at <= now() AND j.client_id > c.client_id
+                ORDER BY j.client_id LIMIT 1),
+               c.depth + 1
+        FROM clients c
+        WHERE c.client_id IS NOT NULL AND c.depth < :max_clients
+    ),
+    running AS (
+        SELECT client_id, count(*) AS n FROM jobs WHERE status = 'running' GROUP BY client_id
+    )
+    SELECT c.client_id
+    FROM clients c
+    LEFT JOIN running r ON r.client_id = c.client_id
+    CROSS JOIN LATERAL (
+        SELECT j.run_at FROM jobs j
+        WHERE j.client_id = c.client_id AND j.status = 'queued' AND j.run_at <= now()
+        ORDER BY j.run_at LIMIT 1
+    ) oldest
+    WHERE c.client_id IS NOT NULL
+    ORDER BY coalesce(r.n, 0), oldest.run_at
+    LIMIT 1
+    """
+)
 
-    job_id = session.scalar(
+
+def _pick_job_id(session: Session, *, fair: bool, max_clients: int) -> uuid.UUID | None:
+    """Find (and row-lock) the next job to run.
+
+    Fair mode serves the client with the fewest running jobs first, so a small client is not
+    stuck behind another client's backlog. It never leaves a worker idle while any runnable job
+    exists: if the chosen client's jobs are all locked by other workers, or fair mode finds
+    nothing, it falls back to the plain "oldest runnable job overall" rule.
+    """
+    if fair:
+        client_id = session.scalar(_PICK_FAIR_CLIENT_SQL, {"max_clients": max_clients})
+        if client_id is not None:
+            job_id = session.scalar(
+                select(Job.id)
+                .where(
+                    Job.client_id == client_id,
+                    Job.status == JobStatus.QUEUED.value,
+                    Job.run_at <= func.now(),
+                )
+                .order_by(Job.run_at, Job.created_at)
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            )
+            if job_id is not None:
+                return job_id
+    return session.scalar(
         select(Job.id)
         .where(Job.status == JobStatus.QUEUED.value, Job.run_at <= func.now())
         .order_by(Job.run_at, Job.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
     )
+
+
+def claim_next_job(
+    session: Session,
+    worker_id: str,
+    lease_seconds: int,
+    *,
+    fair: bool = True,
+    max_clients: int = 64,
+) -> ClaimedJob | None:
+    """Claim the next runnable job, or return None if there is none.
+
+    With `fair=True` (the default) clients take turns by how many jobs each already has running;
+    with `fair=False` the oldest runnable job overall goes first."""
+    assert can_transition(JobStatus.QUEUED, JobStatus.RUNNING)
+
+    job_id = _pick_job_id(session, fair=fair, max_clients=max_clients)
     if job_id is None:
         session.rollback()  # nothing to do; end the transaction
         return None

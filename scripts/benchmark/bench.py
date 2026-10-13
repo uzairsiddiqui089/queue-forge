@@ -62,6 +62,8 @@ BENCH_ENV_DEFAULTS = {
     "MAX_QUEUED_JOBS_PER_CLIENT": "10000",
     "MAX_QUEUED_JOBS_TOTAL": "100000",
     "MAX_REQUEST_BODY_BYTES": "65536",
+    "FAIR_CLAIMING": "true",
+    "FAIR_CLAIM_MAX_CLIENTS": "64",
     "QUEUE_DEPTH_CACHE_SECONDS": "1",
     "METRICS_CACHE_SECONDS": "10",
     "WORKER_LEASE_SECONDS": "30",
@@ -662,7 +664,10 @@ def scenario_fairness(args: argparse.Namespace) -> None:
 
 
 def insert_queued(
-    conn: psycopg.Connection[Any], client_id: uuid.UUID, n: int, kind: str
+    conn: psycopg.Connection[Any],
+    client_id: uuid.UUID | list[uuid.UUID],
+    n: int,
+    kind: str,
 ) -> list[uuid.UUID]:
     """Put n ready-to-run jobs straight into the queue (bypassing the API), return their ids.
 
@@ -675,11 +680,12 @@ def insert_queued(
     else:
         task = "'sleep'"
         payload = "jsonb_build_object('seconds', (ARRAY[0.05, 0.1, 0.15, 0.2])[1 + (g %% 4)])"
+    clients = client_id if isinstance(client_id, list) else [client_id]
     rows = conn.execute(
         f"INSERT INTO jobs (id, client_id, task_type, payload, status, run_at, created_at) "
-        f"SELECT gen_random_uuid(), %s, {task}, {payload}, 'queued', now(), now() "
-        f"FROM generate_series(1, %s) g RETURNING id",
-        (client_id, n),
+        f"SELECT gen_random_uuid(), (%s::uuid[])[1 + (g %% %s)], {task}, {payload}, 'queued', "
+        f"now(), now() FROM generate_series(1, %s) g RETURNING id",
+        (clients, len(clients), n),
     ).fetchall()
     return [r[0] for r in rows]
 
@@ -688,7 +694,10 @@ def scenario_drain(args: argparse.Namespace) -> None:
     """Workers' own capacity: a full queue appears at once, how fast is it emptied?"""
     clean_start(args.workers, keep_history=args.keep_history)
     with connect() as conn:
-        client_id, _ = make_client(conn, "bench")
+        if args.clients > 1:
+            client_id = [make_client(conn, f"bench-{i}")[0] for i in range(args.clients)]
+        else:
+            client_id, _ = make_client(conn, "bench")
         runs = []
         if args.without_new_indexes:
             # Controlled A/B: same database, same data, the two Phase B indexes dropped
@@ -1068,6 +1077,54 @@ def scenario_plans(args: argparse.Namespace) -> None:
         conn.execute("DELETE FROM jobs WHERE client_id = %s", (plans_client,))
 
 
+def scenario_claimcost(args: argparse.Namespace) -> None:
+    """How much does picking a client fairly cost, compared with plain oldest-first?"""
+    from queueforge.worker.claims import _PICK_FAIR_CLIENT_SQL
+
+    fair_sql = str(_PICK_FAIR_CLIENT_SQL).replace(":max_clients", "%(max_clients)s")
+    oldest_sql = (
+        "SELECT id FROM jobs WHERE status = 'queued' AND run_at <= now() "
+        "ORDER BY run_at, created_at LIMIT 1 FOR UPDATE SKIP LOCKED"
+    )
+    ensure_stack(0)
+    with connect() as conn:
+        results: list[dict[str, Any]] = []
+        for k in args.client_counts:
+            reset_data(conn)
+            conn.execute("DELETE FROM api_clients WHERE name LIKE 'cc-%'")
+            conn.execute(
+                "INSERT INTO api_clients (id, name, key_hash, role) "
+                "SELECT gen_random_uuid(), 'cc-' || g, encode(sha256(('cc' || g)::bytea), 'hex'), "
+                "'client' FROM generate_series(1, %s) g",
+                (k,),
+            )
+            conn.execute(
+                "INSERT INTO jobs (id, client_id, task_type, payload, status, run_at, created_at) "
+                "SELECT gen_random_uuid(), c.id, 'echo', '{\"message\":\"x\"}', 'queued', "
+                "now() - (g * interval '1 millisecond'), now() "
+                "FROM api_clients c CROSS JOIN generate_series(1, %s) g WHERE c.name LIKE 'cc-%%'",
+                (args.jobs_per_client,),
+            )
+            conn.execute("ANALYZE jobs")
+            for label, sql, params in (
+                ("oldest_first", oldest_sql, {}),
+                ("fair_pick_max64", fair_sql, {"max_clients": 64}),
+                ("fair_pick_max1000", fair_sql, {"max_clients": 1000}),
+            ):
+                runs = [explain(conn, sql, params)["execution_ms"] for _ in range(args.repeat)]
+                results.append({"clients_with_queued_jobs": k, "query": label, "ms_each_run": runs})
+                shown = [round(x or 0, 2) for x in runs]
+                print(f"  clients={k:<5} {label:<18} {shown} ms")
+        conn.execute(
+            "DELETE FROM job_attempts WHERE job_id IN (SELECT id FROM jobs WHERE client_id IN (SELECT id FROM api_clients WHERE name LIKE 'cc-%'))"
+        )
+        conn.execute(
+            "DELETE FROM jobs WHERE client_id IN (SELECT id FROM api_clients WHERE name LIKE 'cc-%')"
+        )
+        conn.execute("DELETE FROM api_clients WHERE name LIKE 'cc-%'")
+        save("claimcost", args.label, {"parameters": vars(args), "results": results}, conn)
+
+
 def scenario_scrape(args: argparse.Namespace) -> None:
     """Cost of GET /metrics scrapes, back to back, at the current database size."""
     ensure_stack(args.workers)
@@ -1141,6 +1198,7 @@ def main() -> None:
         "drain", scenario_drain, workers=4, jobs=3000, repeat=3, drain_timeout=900.0, kind="echo"
     )
     drain_cmd.add_argument("--keep-history", action="store_true")
+    drain_cmd.add_argument("--clients", type=int, default=1)
     drain_cmd.add_argument("--vacuum-first", action="store_true")
     drain_cmd.add_argument("--without-new-indexes", action="store_true")
     add("fairness", scenario_fairness, workers=4, backlog=3000, b_jobs=20, concurrency=16,
@@ -1152,6 +1210,8 @@ def main() -> None:
     add("preload", scenario_preload, rows=1_000_000)
     add("plans", scenario_plans, queued=20_000, repeat=3)
     add("scrape", scenario_scrape, repeat=5, workers=0)
+    cc = add("claimcost", scenario_claimcost, repeat=5, jobs_per_client=50)
+    cc.add_argument("--client-counts", type=int, nargs="+", default=[1, 10, 100, 1000])
 
     args = p.parse_args()
     args.fn(args)

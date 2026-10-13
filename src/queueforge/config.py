@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     # The worker touches this file regularly; the container healthcheck reads its age.
     worker_liveness_file: str = "/tmp/queueforge-worker-alive"  # noqa: S108
 
+    # Fair claiming: workers serve the client with the fewest running jobs first, so one
+    # client's big backlog does not delay everyone else. Turn off for oldest-first overall.
+    fair_claiming: bool = True
+    # At most this many clients with waiting jobs are compared per claim (keeps the claim cheap).
+    # With more active clients than this, fairness is approximate: see docs/architecture.md.
+    fair_claim_max_clients: int = Field(64, ge=1)
+
     # Retry delay = random value between 0 and min(max, base * 2^(attempt-1)) ("full jitter").
     retry_base_delay_seconds: float = Field(2.0, ge=0)
     retry_max_delay_seconds: float = Field(300.0, ge=0)

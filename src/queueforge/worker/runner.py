@@ -86,6 +86,8 @@ class Worker:
         max_abandoned_threads: int = 3,
         max_error_backoff: float = 30.0,
         liveness_file: str | None = None,
+        fair_claiming: bool = True,
+        fair_claim_max_clients: int = 64,
     ) -> None:
         self._sessions = session_factory
         self.worker_id = worker_id
@@ -102,6 +104,8 @@ class Worker:
         self._max_abandoned = max_abandoned_threads
         self._max_error_backoff = max_error_backoff
         self._liveness_file = liveness_file
+        self._fair_claiming = fair_claiming
+        self._fair_claim_max_clients = fair_claim_max_clients
         self._last_sweep = float("-inf")
         self._last_housekeeping = float("-inf")
         self._abandoned: list[threading.Thread] = []
@@ -124,7 +128,13 @@ class Worker:
         if self._stop.is_set():
             return False  # shutting down: never start new work
         with self._sessions() as session:
-            claimed = claim_next_job(session, self.worker_id, self._lease_seconds)
+            claimed = claim_next_job(
+                session,
+                self.worker_id,
+                self._lease_seconds,
+                fair=self._fair_claiming,
+                max_clients=self._fair_claim_max_clients,
+            )
         if claimed is None:
             return False
 

@@ -125,7 +125,21 @@ A stopping worker claims nothing new. It lets its current job run for up to `WOR
 
 ### Backpressure
 
-The API refuses new jobs when the queue is too long: `429` if one client has too many waiting (`MAX_QUEUED_JOBS_PER_CLIENT`), `503` if the whole queue is full (`MAX_QUEUED_JOBS_TOTAL`), both with `Retry-After`. A replay of an earlier idempotent submit is never refused. The count stops at the limit, but it still costs time as the queue deepens (measured: about 48 ms per check at 100,000 queued jobs), so the global check runs **first, without the lock**, and its answer is reused for `QUEUE_DEPTH_CACHE_SECONDS` (1 s). Counting alone is not safe when requests arrive at the same moment (two requests can both see "one below the cap" and both insert), so the **per-client cap is enforced under a PostgreSQL advisory lock** keyed on the client: that client's check-and-insert steps run one at a time, the lock is released automatically at commit or rollback, and other clients are not slowed. This is tested with 24 simultaneous submits against a cap of 5 (exactly 5 accepted). The **global cap is a soft limit**: it is not locked, so simultaneous submits from different clients can exceed it slightly. An exact global cap would serialize every submit, so that trade-off is left for the benchmark phase to measure. **Not yet done:** fair scheduling between clients (claiming is still oldest-first overall); that is scheduled after benchmarks show which design is affordable.
+The API refuses new jobs when the queue is too long: `429` if one client has too many waiting (`MAX_QUEUED_JOBS_PER_CLIENT`), `503` if the whole queue is full (`MAX_QUEUED_JOBS_TOTAL`), both with `Retry-After`. A replay of an earlier idempotent submit is never refused. The count stops at the limit, but it still costs time as the queue deepens (measured: about 48 ms per check at 100,000 queued jobs), so the global check runs **first, without the lock**, and its answer is reused for `QUEUE_DEPTH_CACHE_SECONDS` (1 s). Counting alone is not safe when requests arrive at the same moment (two requests can both see "one below the cap" and both insert), so the **per-client cap is enforced under a PostgreSQL advisory lock** keyed on the client: that client's check-and-insert steps run one at a time, the lock is released automatically at commit or rollback, and other clients are not slowed. This is tested with 24 simultaneous submits against a cap of 5 (exactly 5 accepted). The **global cap is a soft limit**: it is not locked, so simultaneous submits from different clients can exceed it slightly. An exact global cap would serialize every submit, so that trade-off is left for the benchmark phase to measure. 
+
+### Fair claiming
+
+Claiming used to be oldest-first across all clients, so one client's large backlog made every other client wait behind it (measured: a small client waited about 120 s instead of 0.2 s). Now a worker first picks the **client** with the fewest jobs currently running, then takes that client's oldest runnable job. Ties go to the client whose oldest job has waited longest.
+
+How it works, in order:
+1. List the clients that have runnable queued jobs by jumping from one `client_id` to the next in the index (one cheap lookup per client), looking at no more than `FAIR_CLAIM_MAX_CLIENTS` (64) of them.
+2. Count each client's running jobs (only a handful of rows are ever in the `running` state).
+3. Choose the client with the fewest running jobs.
+4. Lock and claim that client's oldest runnable job with `FOR UPDATE SKIP LOCKED`, as before. Everything after this point (lease token, attempt row, fenced writes) is unchanged.
+
+A worker is never left idle while work exists: if the chosen client's jobs are all being claimed by other workers at that moment, it falls back to the oldest runnable job overall.
+
+Limits, stated plainly: fairness is *approximate* when more than 64 clients are waiting at once (only 64 are compared per claim); it balances the number of running jobs, not run time, so a client with long jobs still holds workers longer; and it adds a small cost per claim (about 0.2 ms with a few clients, about 1.2 ms with hundreds). Set `FAIR_CLAIMING=false` to go back to oldest-first. Measurements are in [benchmarking.md](benchmarking.md).
 
 ### When the database is down or busy
 

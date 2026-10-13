@@ -38,7 +38,7 @@ The throughput scenarios (API cost, drain capacity, deep queue) were each repeat
 
 (Taken from the result file `20261013T143808Z_drain_abab-r2-B-without-indexes.json`; every result file records its own copy.)
 
-**Which code produced which numbers.** The core and extended matrices (the first runs) used the code of the merged Phase A: it has **neither** the two partial indexes **nor** the two short caches described in section 4. Rows labelled "after", "abab", "reordered" or "vacuumed" come from the later code. Each result file records the `git_commit` it ran on and whether the working tree had uncommitted changes (it usually did, because the harness itself was being edited).
+**Which code produced which numbers.** The core and extended matrices (the first runs) used the code of the merged Phase A: it has **neither** the two partial indexes **nor** the two short caches described in section 4. Rows labelled "after", "abab", "reordered" or "vacuumed" come from the later code, and rows labelled "fair" from the code with fair claiming (in the fairness table, the "first run" and `fair-off-control` rows are, respectively, before it and the same code with it switched off). Each result file records the `git_commit` it ran on and whether the working tree had uncommitted changes (it usually did, because the harness itself was being edited).
 
 Other things that matter when reading the numbers:
 - The API runs as a **single uvicorn process** (sync endpoints in a thread pool, a pool of 10 + 10 database connections).
@@ -108,6 +108,14 @@ Concurrency 16, limiter OFF: 3 runs, accepted/s median (min-max) = 48.3 (45.0-49
 | abab-r1-B-without-indexes | 4 | echo | empty database, new indexes dropped | 3 | 87.5 (83.2-87.6) | 743-762 jobs/worker | 0 / 0 | 64 / 52 |
 | abab-r2-A-with-indexes | 4 | echo | empty database | 3 | 87.9 (86.5-89.7) | 742-760 jobs/worker | 0 / 0 | 67 / 53 |
 | abab-r2-B-without-indexes | 4 | echo | empty database, new indexes dropped | 3 | 85.9 (81.0-92.5) | 738-760 jobs/worker | 0 / 0 | 66 / 50 |
+| fair-abab-r1-A-fair-10clients | 4 | echo | empty database, 10 clients, fair claiming on | 3 | 71.3 (70.5-73.1) | 742-758 jobs/worker | 0 / 0 | 72 / 51 |
+| fair-abab-r1-B-oldest-10clients | 4 | echo | empty database, 10 clients, fair claiming OFF (oldest first) | 3 | 73.9 (66.1-75.1) | 742-758 jobs/worker | 0 / 0 | 72 / 50 |
+| fair-abab-r2-A-fair-10clients | 4 | echo | empty database, 10 clients, fair claiming on | 3 | 63.3 (58.1-66.2) | 737-759 jobs/worker | 0 / 0 | 70 / 53 |
+| fair-abab-r2-B-oldest-10clients | 4 | echo | empty database, 10 clients, fair claiming OFF (oldest first) | 3 | 68.5 (66.1-70.8) | 738-764 jobs/worker | 0 / 0 | 66 / 49 |
+| fair-abab-A-fair-1client | 4 | echo | empty database, fair claiming on | 3 | 66.0 (61.2-66.2) | 744-760 jobs/worker | 0 / 0 | 69 / 49 |
+| fair-abab-B-oldest-1client | 4 | echo | empty database, fair claiming OFF (oldest first) | 3 | 75.3 (64.3-77.7) | 741-761 jobs/worker | 0 / 0 | 68 / 50 |
+| fair-abab-A2-fair-1client | 4 | echo | empty database, fair claiming on | 3 | 65.9 (62.8-71.0) | 736-763 jobs/worker | 0 / 0 | 71 / 51 |
+| fair-abab-B2-oldest-1client | 4 | echo | empty database, fair claiming OFF (oldest first) | 3 | 70.6 (68.5-74.6) | 737-759 jobs/worker | 0 / 0 | 69 / 49 |
 
 **Reading it.**
 - With sleep-dominated `mixed` jobs, throughput scales close to linearly up to 4 workers (6.0, 11.9, 23.9 jobs/s for 1, 2, 4 workers), at about 75% of the theoretical `workers / 0.125 s`: roughly 40 ms of overhead per job (claim, lease, heartbeat thread, two commits). At 8 workers it reaches 35 jobs/s, only 55% of theoretical, because the machine runs out of CPU.
@@ -149,12 +157,27 @@ Two workers on `mixed` jobs can drain about 11.9 jobs/s. At 50%, 80% and 95% of 
 
 ### 3.6 Fairness between clients
 
-| Case | Jobs queued when B started | B queue wait p50 (s) | p95 | max |
-|---|---|---|---|---|
-| baseline_b_alone | 0 | 0.192 | 0.536 | 0.584 |
-| b_behind_a_backlog | 3000 | 115.898 | 120.329 | 120.833 |
+| Run | Case | Jobs queued when B started | B queue wait p50 (s) | p95 | max |
+|---|---|---|---|---|---|
+| w4-backlog3000 | baseline_b_alone | 0 | 0.192 | 0.536 | 0.584 |
+| w4-backlog3000 | b_behind_a_backlog | 3000 | 115.898 | 120.329 | 120.833 |
+| fair-off-control | baseline_b_alone | 0 | 0.213 | 0.534 | 0.573 |
+| fair-off-control | b_behind_a_backlog | 3000 | 120.720 | 124.973 | 125.451 |
+| fair-on | baseline_b_alone | 0 | 0.201 | 0.576 | 0.582 |
+| fair-on | b_behind_a_backlog | 2999 | 0.059 | 0.330 | 0.644 |
 
-This is a **measured weakness, not yet fixed.** Claiming is oldest-first across all clients, so a small client's job waits behind another client's entire backlog: client B waited a median **116 s** (instead of 0.19 s, about 600 times longer) behind a 3,000-job backlog from client A. The queue caps limit how bad this can get but do not remove it. Section 5 describes the planned fix.
+**Before.** In the first run, and again in the `fair-off-control` run, claiming was oldest-first across all clients, so client B's job waited behind client A's entire 3,000-job backlog: a median of **116 s** and **121 s**, against about 0.2 s when B is alone (roughly 600 times longer). **After fair claiming** (section 4.5), B's median wait behind the same backlog was **0.06 s** (p95 0.33 s, max 0.64 s), as short as when B is alone. The control matters: with fair claiming switched off, the *same code* on the *same machine* gave 121 s again, so the improvement comes from the change, not from the machine or the day.
+
+**What picking the next job costs: oldest-first vs fair, by number of waiting clients**
+
+Median of 5 runs of EXPLAIN (ANALYZE), milliseconds. 50 queued jobs per client.
+
+| Clients with waiting jobs | Oldest first | Fair pick (compares up to 64 clients) | Fair pick (compares up to 1,000) |
+|---|---|---|---|
+| 1 | 0.09 ms | 0.22 ms | 0.20 ms |
+| 10 | 0.13 ms | 0.30 ms | 0.31 ms |
+| 100 | 0.22 ms | 1.16 ms | 1.91 ms |
+| 1000 | 0.74 ms | 1.27 ms | 23.39 ms |
 
 ### 3.7 Soak
 
@@ -243,11 +266,16 @@ Each change below was made because a measurement showed a problem, and was re-me
 
 **3. A short cache on `/metrics`.** A scrape took 0.7–4.4 s with 1,000,000 jobs (two aggregate queries scan whole tables, and the indexes do not help them). With a 10-second cache the first scrape still takes about 1.2 s, then **0.06–0.08 s**. The staleness is up to 10 s, and the scans themselves remain; retention (planned) is the real fix.
 
-**4. The exact per-client cap** (an earlier fix) was found to be missing from `main` because its pull request had been merged before the commit was pushed; it is included in this branch.
+**4. The exact per-client cap** (an earlier fix) was found to be missing from `main` because its pull request had been merged before the commit was pushed; it was included with the Phase B merge.
+
+**5. Fair claiming (migration 0005).** A worker now first picks the *client* with the fewest jobs currently running (ties go to the client whose oldest job has waited longest), then takes that client's oldest job; a worker never idles while any runnable job exists (it falls back to oldest-first). Effect: the 121 s wait in 3.6 became **0.06 s**. What it costs:
+- *Per claim* (table in 3.6): about 0.2-0.3 ms with up to 10 waiting clients and about 1.2 ms with 100 to 1,000, against 0.1-0.7 ms for oldest-first. The comparison is limited to 64 clients per claim on purpose: with the limit raised to 1,000 and 1,000 clients waiting, one pick took about 23 ms.
+- *Worker throughput*: with do-nothing `echo` jobs and 4 workers, fair claiming on vs off in four interleaved pairs gave 71.3 vs 73.9 and 63.3 vs 68.5 jobs/s (10 clients), and 66.0 vs 75.3 and 65.9 vs 70.6 jobs/s (1 client). Fair was lower in **all four pairs, by about 4% to 12%**, which is a small real cost even though individual runs vary by about 10%. Real jobs spend far longer running than being claimed, so the relative cost should be much smaller, but this was **not measured** with longer jobs.
+- *Index change*: the per-client queued-jobs index now also contains `run_at` (it replaces the earlier one).
+- *Limits*: with more than 64 clients waiting at once, only the 64 with the lowest ids are compared per claim, so fairness is approximate beyond that; "fair" means an equal number of running jobs per client, not an equal share of run time (a client with long jobs still holds workers longer); retrying jobs and delayed jobs are treated like any other.
 
 ## 5. Findings not acted on yet
 
-- **No fairness between clients (section 3.6).** The data justify fixing it. Planned design, **not implemented**: when claiming, pick the client with the fewest jobs currently running (ties: oldest waiting job), then that client's oldest job. It needs a per-client queued index (one exists) and the new running-jobs index, and its cost must be measured against the 0.3–0.5 ms the current claim takes.
 - **The API is the bottleneck on this machine** (about 50 submits/s, more than one core busy). Not investigated: profiling the request path, and running several uvicorn processes.
 - **Throughput drops with a large history.** With 1M finished jobs, 4-worker `echo` drain was 54–66 jobs/s (vacuumed) against about 82–88 with an empty database, a drop of roughly 25–35%. The indexes do not explain or fix it. A likely cause is that the data (about 450 MB) no longer fits in PostgreSQL's default 128 MB of shared buffers, but this was **not tested**. Retention (deleting old finished jobs) would avoid it.
 - **Dead rows pile up.** Before a manual vacuum, the 1M-row `jobs` table held about 165,000 dead rows (the default autovacuum waits for 20% of the table). Per-table autovacuum settings should be tuned and tested.
@@ -276,6 +304,7 @@ From the repository root, with the database credentials exported (`set -a; . ./.
 |---|---|
 | `scripts/benchmark/run_core.sh` | API cost, worker drain capacity, idle latency (sections 3.1 to 3.3) |
 | `scripts/benchmark/run_extended.sh` | fairness, overload, steady state, soak, 1M-row history and query plans |
+| `scripts/benchmark/run_fairness.sh` | the fair-claiming measurements (3.6 and section 4.5) |
 | `scripts/benchmark/run_after_changes.sh` and `..._part2.sh`, `..._part3.sh`, `..._part4.sh` | the re-measurements after the changes in section 4 (run in four parts because of the harness problems described above; the exact commands are in each file) |
 
 `uv run python scripts/benchmark/summarize.py` regenerates every table in this document from the files in `docs/benchmark-results/`. Remove the benchmark stack and its database with `uv run python scripts/benchmark/bench.py down`.

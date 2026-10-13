@@ -47,6 +47,8 @@ def main() -> int:
         drain_seconds=settings.worker_shutdown_drain_seconds,
         max_abandoned_threads=settings.worker_max_abandoned_threads,
         liveness_file=settings.worker_liveness_file,
+        fair_claiming=settings.fair_claiming,
+        fair_claim_max_clients=settings.fair_claim_max_clients,
     )
     worker.run_forever()
     return EXIT_UNHEALTHY if worker.exit_requested else 0
