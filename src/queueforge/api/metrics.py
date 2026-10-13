@@ -36,6 +36,7 @@ class Reading:
     expired: int
     workers_alive: int
     by_outcome: dict[str, int]
+    oldest_finished: float
 
 
 class DatabaseCollector:
@@ -77,6 +78,15 @@ class DatabaseCollector:
                     f"AND last_seen_at > now() - interval '{PRESENCE_STALE_SECONDS} seconds'"
                 )
             ).scalar_one()
+            oldest_finished = conn.execute(
+                text(
+                    "SELECT coalesce(extract(epoch FROM now() - min(c)), 0) FROM ("
+                    "SELECT min(completed_at) AS c FROM jobs WHERE status = 'succeeded' "
+                    "UNION ALL SELECT min(completed_at) FROM jobs WHERE status = 'failed' "
+                    "UNION ALL SELECT min(completed_at) FROM jobs WHERE status = 'dead_lettered'"
+                    ") t"
+                )
+            ).scalar_one()
             by_outcome: dict[str, int] = {
                 row[0]: row[1]
                 for row in conn.execute(
@@ -90,6 +100,7 @@ class DatabaseCollector:
             expired,
             workers_alive,
             by_outcome,
+            float(oldest_finished),
         )
 
     def _reading(self) -> Reading:
@@ -131,6 +142,12 @@ class DatabaseCollector:
             "Worker processes seen in the last 30 seconds. ALERT when this is 0: nothing is "
             "running jobs or recovering crashed ones",
             value=float(r.workers_alive),
+        )
+        yield GaugeMetricFamily(
+            "queueforge_oldest_finished_job_age_seconds",
+            "Age of the oldest finished job still stored. ALERT when this is well above the "
+            "longest retention period: the maintenance process has stopped deleting old data",
+            value=r.oldest_finished,
         )
         attempts = CounterMetricFamily(
             "queueforge_job_attempts", "Finished attempts by outcome", labels=["outcome"]

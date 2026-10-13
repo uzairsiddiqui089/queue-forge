@@ -16,6 +16,7 @@ focuses on correct, explainable backend engineering.
 
 ## Implemented
 
+- Data retention: a `maintenance` service deletes old finished jobs (and their attempts, idempotency keys, notifications) in small safe batches; queued and running jobs are never touched (details and measurements in [docs/operations.md](docs/operations.md) and [docs/benchmarking.md](docs/benchmarking.md))
 - Fair claiming: workers serve the client with the fewest running jobs first, so one client's backlog no longer blocks the others (a small client's wait behind a 3,000-job backlog fell from about 120 s to 0.06 s in the benchmark)
 - A repeatable benchmark harness (`scripts/benchmark/`) with measured results and findings in [docs/benchmarking.md](docs/benchmarking.md)
 - Structured JSON logs with a field allow-list (payloads, keys and query strings are never logged; tested)
@@ -124,7 +125,7 @@ curl localhost:8000/v1/jobs/<id> -H "X-API-Key: <your key>"
 - Retry settings are global (env vars), not per task type. Task time limits are set per task type in code.
 - Rate limiting fails open: if Redis is down there is no limit (a deliberate trade-off, see [operations](docs/operations.md)). Failed logins are not rate limited.
 - No endpoint to create API clients; use the script above. No key rotation or expiry.
-- Job payloads are stored unencrypted. No cleanup of old jobs or keys. See [security](docs/security.md).
+- Job payloads are stored unencrypted until retention deletes them. Retention deletes data for good (no archive). See [security](docs/security.md).
 - The Compose file is for local development only (ports bound to localhost, no TLS, no Redis password).
 - Performance figures exist but come from **one low-end laptop** and are not capacity numbers; see [docs/benchmarking.md](docs/benchmarking.md) for what was measured, what was found and fixed, and the limits. Not yet validated in any production-like environment.
 - **Fairness is approximate beyond 64 clients waiting at once** and means an equal number of running jobs per client, not an equal share of run time. Fair claiming costs a few percent of worker throughput for do-nothing jobs (measured; see [docs/benchmarking.md](docs/benchmarking.md)).

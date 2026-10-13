@@ -1,0 +1,33 @@
+  100000/1000000 rows (9s)
+  200000/1000000 rows (18s)
+  300000/1000000 rows (26s)
+  400000/1000000 rows (35s)
+  500000/1000000 rows (44s)
+  600000/1000000 rows (53s)
+  700000/1000000 rows (62s)
+  800000/1000000 rows (70s)
+  900000/1000000 rows (79s)
+  1000000/1000000 rows (88s)
+  {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 309411840, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 215883776, 'table_bytes': 101138432}}
+saved docs\benchmark-results\20261013T162022Z_preload_retention-1m-again.json
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  eligible before: {'succeeded': 990000, 'failed': 0, 'dead_lettered': 10000}
+  250000 jobs deleted, 27s
+  500000 jobs deleted, 54s
+  750000 jobs deleted, 81s
+  998000 jobs deleted, 120s
+  purged 1000000 jobs (2000000 rows) in 120s = 8319 jobs/s; per-batch ms p50=109 p95=116 max=335
+saved docs\benchmark-results\20261013T162244Z_purge_retention-full-1m.json
+### full purge finished

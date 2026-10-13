@@ -15,6 +15,9 @@ x-app-env: &app-env
   MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-65536}
   MAX_QUEUED_JOBS_PER_CLIENT: ${MAX_QUEUED_JOBS_PER_CLIENT:-10000}
   MAX_QUEUED_JOBS_TOTAL: ${MAX_QUEUED_JOBS_TOTAL:-100000}
+  RETENTION_SUCCEEDED_DAYS: ${RETENTION_SUCCEEDED_DAYS:-7}
+  RETENTION_FAILED_DAYS: ${RETENTION_FAILED_DAYS:-30}
+  RETENTION_DEAD_LETTER_DAYS: ${RETENTION_DEAD_LETTER_DAYS:-30}
   FAIR_CLAIMING: ${FAIR_CLAIMING:-true}
   FAIR_CLAIM_MAX_CLIENTS: ${FAIR_CLAIM_MAX_CLIENTS:-64}
   QUEUE_DEPTH_CACHE_SECONDS: ${QUEUE_DEPTH_CACHE_SECONDS:-1}
@@ -108,6 +111,27 @@ services:
         - -c
         - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/queueforge-worker-alive') < 60 else 1)"
       interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Deletes old finished jobs (and their attempts, idempotency keys, notifications) in small
+  # batches. Never touches queued or running jobs. See docs/operations.md.
+  maintenance:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "queueforge.maintenance"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/queueforge-maintenance-alive') < 300 else 1)"
+      interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s

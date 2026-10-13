@@ -27,6 +27,12 @@ ALLOWED_FIELDS = frozenset(
         "duration_ms",
         "recovered",
         "failures",
+        "purged_jobs",
+        "purged_attempts",
+        "purged_idempotency_keys",
+        "purged_workers",
+        "batches",
+        "more_to_do",
         "limit",
     }
 )

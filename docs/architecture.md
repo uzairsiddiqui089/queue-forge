@@ -23,6 +23,7 @@ The rules live in `src/queueforge/domain/states.py`. Workers will apply every ch
 | `jobs` | One row per job: type, payload, status, attempts, schedule (`run_at`), lease fields (used from Milestone 3), result and error. |
 | `job_attempts` | One row per execution try: which worker, how long, and how it ended. |
 | `notifications` | Side effect of the demo task; one row per job at most. |
+| `workers` | One row per worker process, refreshed every few seconds, so you can see which are alive. |
 | `idempotency_keys` | Remembers `(client, key) → job` for 24 hours so a repeated submit does not create a second job. |
 
 
@@ -140,6 +141,10 @@ How it works, in order:
 A worker is never left idle while work exists: if the chosen client's jobs are all being claimed by other workers at that moment, it falls back to the oldest runnable job overall.
 
 Limits, stated plainly: fairness is *approximate* when more than 64 clients are waiting at once (only 64 are compared per claim); it balances the number of running jobs, not run time, so a client with long jobs still holds workers longer; and it adds a small cost per claim (about 0.2 ms with a few clients, about 1.2 ms with hundreds). Set `FAIR_CLAIMING=false` to go back to oldest-first. Measurements are in [benchmarking.md](benchmarking.md).
+
+### Data lifecycle (retention)
+
+Finished jobs are kept for a limited time and then deleted by the `maintenance` process (`src/queueforge/maintenance/`, using `src/queueforge/services/retention.py`). One SQL statement deletes a batch of up to 1,000 jobs *together with* the rows that point at them (attempts, idempotency keys, notifications). PostgreSQL checks foreign keys at the end of a statement, so parent and child rows can go in the same statement and nothing is ever left dangling. The batch is chosen oldest-first with `FOR UPDATE SKIP LOCKED`, so concurrent purgers and anyone touching a row (an admin re-queueing, say) never block each other; each batch is its own short transaction. Only `succeeded`, `failed` and `dead_lettered` jobs are ever candidates, so a `queued` or `running` job is never deleted however old. Three small indexes (`ix_jobs_finished_status_completed`, `ix_idempotency_keys_expires_at`, `ix_idempotency_keys_job_id`) keep each batch from scanning a table. The metric `queueforge_oldest_finished_job_age_seconds` shows when purging has stopped. Periods, limits and operating notes: [operations.md](operations.md); measurements: [benchmarking.md](benchmarking.md).
 
 ### When the database is down or busy
 

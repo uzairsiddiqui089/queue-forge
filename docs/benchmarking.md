@@ -38,7 +38,7 @@ The throughput scenarios (API cost, drain capacity, deep queue) were each repeat
 
 (Taken from the result file `20261013T143808Z_drain_abab-r2-B-without-indexes.json`; every result file records its own copy.)
 
-**Which code produced which numbers.** The core and extended matrices (the first runs) used the code of the merged Phase A: it has **neither** the two partial indexes **nor** the two short caches described in section 4. Rows labelled "after", "abab", "reordered" or "vacuumed" come from the later code, and rows labelled "fair" from the code with fair claiming (in the fairness table, the "first run" and `fair-off-control` rows are, respectively, before it and the same code with it switched off). Each result file records the `git_commit` it ran on and whether the working tree had uncommitted changes (it usually did, because the harness itself was being edited).
+**Which code produced which numbers.** The core and extended matrices (the first runs) used the code of the merged Phase A: it has **neither** the two partial indexes **nor** the two short caches described in section 4. Rows labelled "after", "abab", "reordered" or "vacuumed" come from the later code, rows labelled "retention" from the code with the maintenance process and its indexes, and rows labelled "fair" from the code with fair claiming (in the fairness table, the "first run" and `fair-off-control` rows are, respectively, before it and the same code with it switched off). Each result file records the `git_commit` it ran on and whether the working tree had uncommitted changes (it usually did, because the harness itself was being edited).
 
 Other things that matter when reading the numbers:
 - The API runs as a **single uvicorn process** (sync endpoints in a thread pool, a pool of 10 + 10 database connections).
@@ -116,6 +116,10 @@ Concurrency 16, limiter OFF: 3 runs, accepted/s median (min-max) = 48.3 (45.0-49
 | fair-abab-B-oldest-1client | 4 | echo | empty database, fair claiming OFF (oldest first) | 3 | 75.3 (64.3-77.7) | 741-761 jobs/worker | 0 / 0 | 68 / 50 |
 | fair-abab-A2-fair-1client | 4 | echo | empty database, fair claiming on | 3 | 65.9 (62.8-71.0) | 736-763 jobs/worker | 0 / 0 | 71 / 51 |
 | fair-abab-B2-oldest-1client | 4 | echo | empty database, fair claiming OFF (oldest first) | 3 | 70.6 (68.5-74.6) | 737-759 jobs/worker | 0 / 0 | 69 / 49 |
+| retention-r1-A-no-purge | 4 | echo | 1M history, fair claiming on | 3 | 74.5 (61.7-87.6) | 734-762 jobs/worker | 0 / 0 | 71 / 47 |
+| retention-r1-B-purge-running | 4 | echo | 1M history, purge running flat out in the background, fair claiming on | 3 | 71.0 (70.5-72.5) | 737-763 jobs/worker | 0 / 0 | 144 / 40 |
+| retention-r2-A-no-purge | 4 | echo | 1M history, fair claiming on | 3 | 69.5 (58.7-98.8) | 742-762 jobs/worker | 0 / 0 | 72 / 51 |
+| retention-r2-B-purge-running | 4 | echo | 1M history, purge running flat out in the background, fair claiming on | 3 | 66.5 (51.6-67.7) | 740-761 jobs/worker | 0 / 0 | 145 / 40 |
 
 **Reading it.**
 - With sleep-dominated `mixed` jobs, throughput scales close to linearly up to 4 workers (6.0, 11.9, 23.9 jobs/s for 1, 2, 4 workers), at about 75% of the theoretical `workers / 0.125 s`: roughly 40 ms of overhead per job (claim, lease, heartbeat thread, two commits). At 8 workers it reaches 35 jobs/s, only 55% of theoretical, because the machine runs out of CPU.
@@ -215,6 +219,14 @@ Container peaks: worker: CPU 63% of a core, memory 55 MiB; api: CPU 231% of a co
 
 Tables after preload: {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 235896832, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 216596480, 'table_bytes': 101138432}} (took 154 s)
 
+**Preloaded history**
+
+Tables after preload: {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 309108736, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 215891968, 'table_bytes': 101138432}} (took 156 s)
+
+**Preloaded history**
+
+Tables after preload: {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 309411840, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 215883776, 'table_bytes': 101138432}} (took 89 s)
+
 **Query timings with 1,000,000 finished jobs and 20,000 queued: before and after the two partial indexes**
 
 Median of 3 runs of EXPLAIN (ANALYZE), milliseconds.
@@ -256,6 +268,29 @@ plans run '1m-queue100k': GET /metrics seconds [0.76, 0.97, 0.79]
 
 plans run '1m-after-indexes': GET /metrics seconds [1.95, 0.17, 0.11]
 
+### 3.9 Retention (cleaning up old jobs)
+
+Run `retention-rest-of-history`: 50000 jobs (100000 rows including their attempts) in 7.5 s = **6660 jobs/s**; time per batch p50 / p95 / max = 104 / 138 / 141 ms.
+
+| Moment | jobs table: live rows | dead rows | size (MB) | attempts table: live rows | dead rows | size (MB) |
+|---|---|---|---|---|---|---|
+| before the purge | 60994 | 83057 | 311 | 55017 | 65139 | 218 |
+| right after the purge | 10994 | 133057 | 311 | 5017 | 115139 | 218 |
+| after VACUUM | 3000 | 0 | 184 | 3000 | 0 | 149 |
+
+
+Run `retention-full-1m`: 1000000 jobs (2000000 rows including their attempts) in 120.2 s = **8319 jobs/s**; time per batch p50 / p95 / max = 109 / 116 / 335 ms.
+
+| Moment | jobs table: live rows | dead rows | size (MB) | attempts table: live rows | dead rows | size (MB) |
+|---|---|---|---|---|---|---|
+| before the purge | 996868 | 0 | 309 | 999992 | 0 | 216 |
+| right after the purge | 5000 | 555000 | 309 | 5000 | 500000 | 216 |
+| after VACUUM | 0 | 0 | 120 | 0 | 0 | 115 |
+
+**Reading it.** Two purge runs are shown. `retention-full-1m` purged a complete **1,000,000-job history in 120 s (about 8,300 jobs a second, 2,000,000 rows including attempts)**, with each 1,000-job batch taking about 110 ms. The earlier run, `retention-rest-of-history`, only had 50,000 jobs left (a purger running during the live-work test had already deleted the rest), so treat it as a small sample. Two things to know about what it leaves behind: the rows it deletes stay as "dead rows" until PostgreSQL's vacuum runs (here a manual vacuum was needed to see the space come back; the default automatic vacuum only starts after about 20% of a table is dead), and the data files shrink only partly (in the small run, the jobs table went from 311 MB to 184 MB in total size; the rest is reused for new rows, not returned to the operating system).
+
+**Does purging slow down live work?** The test ran the purge *flat out* (far harder than the shipped service, which does one bounded cycle a minute) while 4 workers processed `echo` jobs. In the interleaved comparison (rows `retention-*` in the drain table in 3.2), the medians were 74.5 jobs/s without the purge against 71.0 with it in round 1, and 69.5 against 66.5 in round 2: **about 4-5% lower with the purge running, in both rounds, but smaller than the run-to-run spread** (single runs ranged from 52 to 99 jobs/s). While competing with the workers the purge deleted about 3,700 jobs a second instead of about 8,300. Caveat: in round 2 the history had already shrunk to 385,000-525,000 rows (the purge in round 1 had consumed it), so round 2 is weaker evidence than round 1.
+
 ## 4. What the measurements led to (and whether it worked)
 
 Each change below was made because a measurement showed a problem, and was re-measured afterwards.
@@ -264,9 +299,11 @@ Each change below was made because a measurement showed a problem, and was re-me
 
 **2. A short cache on the global queue-depth check.** At 100,000 queued jobs the global cap check cost about **48 ms per submit** (it counts up to the cap each time). With 90,000 jobs queued, submits fell to **5.6–6.3 per second**, and 14–24 of 500 requests were wrongly refused with `503` (the check ran while holding the client's lock, so concurrent submits queued behind it and timed out). Fixes: reuse the answer for 1 second (the global cap was already a soft limit) and do the check **before** taking the lock. Result at 90,000 queued: **35–38 accepted/s with the cache off, 39–47/s with it on** (51/s with an empty queue), and no refusals. A new automated test pins the order, and fails if the old order is restored.
 
-**3. A short cache on `/metrics`.** A scrape took 0.7–4.4 s with 1,000,000 jobs (two aggregate queries scan whole tables, and the indexes do not help them). With a 10-second cache the first scrape still takes about 1.2 s, then **0.06–0.08 s**. The staleness is up to 10 s, and the scans themselves remain; retention (planned) is the real fix.
+**3. A short cache on `/metrics`.** A scrape took 0.7–4.4 s with 1,000,000 jobs (two aggregate queries scan whole tables, and the indexes do not help them). With a 10-second cache the first scrape still takes about 1.2 s, then **0.06–0.08 s**. The staleness is up to 10 s, and the scans themselves remain; retention (section 4.6) is the real fix because it keeps the tables small.
 
 **4. The exact per-client cap** (an earlier fix) was found to be missing from `main` because its pull request had been merged before the commit was pushed; it was included with the Phase B merge.
+
+**6. Retention (migration 0006).** Section 3.9. This is what stops the problems in 3.8 from appearing in the first place: with finished jobs deleted after a week (a month for failures), the tables stay at a size set by the retention period instead of growing without limit. Three small indexes make each purge batch cheap; the metric `queueforge_oldest_finished_job_age_seconds` shows when purging has stopped. It was **not measured** how large the tables get at a given job rate and retention period, nor what the extra indexes cost workers on their own (the interleaved index test in 4.1 covered the earlier two, not these three).
 
 **5. Fair claiming (migration 0005).** A worker now first picks the *client* with the fewest jobs currently running (ties go to the client whose oldest job has waited longest), then takes that client's oldest job; a worker never idles while any runnable job exists (it falls back to oldest-first). Effect: the 121 s wait in 3.6 became **0.06 s**. What it costs:
 - *Per claim* (table in 3.6): about 0.2-0.3 ms with up to 10 waiting clients and about 1.2 ms with 100 to 1,000, against 0.1-0.7 ms for oldest-first. The comparison is limited to 64 clients per claim on purpose: with the limit raised to 1,000 and 1,000 clients waiting, one pick took about 23 ms.
@@ -278,7 +315,7 @@ Each change below was made because a measurement showed a problem, and was re-me
 
 - **The API is the bottleneck on this machine** (about 50 submits/s, more than one core busy). Not investigated: profiling the request path, and running several uvicorn processes.
 - **Throughput drops with a large history.** With 1M finished jobs, 4-worker `echo` drain was 54–66 jobs/s (vacuumed) against about 82–88 with an empty database, a drop of roughly 25–35%. The indexes do not explain or fix it. A likely cause is that the data (about 450 MB) no longer fits in PostgreSQL's default 128 MB of shared buffers, but this was **not tested**. Retention (deleting old finished jobs) would avoid it.
-- **Dead rows pile up.** Before a manual vacuum, the 1M-row `jobs` table held about 165,000 dead rows (the default autovacuum waits for 20% of the table). Per-table autovacuum settings should be tuned and tested.
+- **Dead rows pile up.** Before a manual vacuum, the 1M-row `jobs` table held about 165,000 dead rows, and 133,000 were left right after a large purge (the default autovacuum waits for 20% of the table). Per-table autovacuum settings would help but were **not tuned or tested**; retention keeps the tables smaller, which lowers the number.
 - **Polling latency** (section 3.3) and the **`/metrics` full-table scans** (section 4.3) remain as described.
 
 ## 6. What went wrong while measuring, and the limits of these numbers
@@ -304,6 +341,7 @@ From the repository root, with the database credentials exported (`set -a; . ./.
 |---|---|
 | `scripts/benchmark/run_core.sh` | API cost, worker drain capacity, idle latency (sections 3.1 to 3.3) |
 | `scripts/benchmark/run_extended.sh` | fairness, overload, steady state, soak, 1M-row history and query plans |
+| `scripts/benchmark/run_retention.sh` | the retention measurements (3.9 and section 4.6) |
 | `scripts/benchmark/run_fairness.sh` | the fair-claiming measurements (3.6 and section 4.5) |
 | `scripts/benchmark/run_after_changes.sh` and `..._part2.sh`, `..._part3.sh`, `..._part4.sh` | the re-measurements after the changes in section 4 (run in four parts because of the harness problems described above; the exact commands are in each file) |
 

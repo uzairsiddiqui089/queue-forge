@@ -66,3 +66,26 @@ def test_production_accepts_a_strong_password() -> None:
 def test_development_still_allows_the_example_password() -> None:
     url = "postgresql+psycopg://queueforge:change-me@127.0.0.1:5432/queueforge"
     assert Settings(_env_file=None, database_url=url).environment == "development"  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"retention_succeeded_days": 0},
+        {"retention_failed_days": 0},
+        {"retention_dead_letter_days": -1},
+        {"purge_batch_size": 0},
+        {"purge_batch_size": 50_000},  # one transaction must stay small
+        {"purge_max_batches_per_cycle": 0},
+        {"maintenance_interval_seconds": 0},
+    ],
+)
+def test_unsafe_retention_settings_are_rejected(overrides: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        make(**overrides)
+
+
+def test_retention_defaults_keep_failures_longer_than_successes() -> None:
+    settings = make()
+    assert settings.retention_succeeded_days < settings.retention_failed_days
+    assert settings.retention_dead_letter_days >= settings.retention_succeeded_days
