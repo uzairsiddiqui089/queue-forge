@@ -1,0 +1,50 @@
+ Container qfbench-redis-1 Starting 
+ Container qfbench-db-1 Starting 
+ Container qfbench-redis-1 Started 
+ Container qfbench-db-1 Started 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-api-1 Starting 
+ Container qfbench-api-1 Started 
+benchmark stack is up with 0 worker(s) at http://127.0.0.1:18000
+  100000/1000000 rows (18s)
+  200000/1000000 rows (38s)
+  300000/1000000 rows (51s)
+  400000/1000000 rows (68s)
+  500000/1000000 rows (79s)
+  600000/1000000 rows (97s)
+  700000/1000000 rows (111s)
+  800000/1000000 rows (121s)
+  900000/1000000 rows (137s)
+  1000000/1000000 rows (149s)
+  {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 309141504, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 216391680, 'table_bytes': 101138432}}
+saved docs\benchmark-results\20261013T164726Z_preload_backup-1m.json
+### backup + verified restore of 1,000,000 jobs (and as many attempts), plain and encrypted
+ Container qfbench-db-1 Running 
+ Container qfbench-redis-1 Running 
+ Container qfbench-api-1 Running 
+ Container qfbench-db-1 Waiting 
+ Container qfbench-db-1 Healthy 
+ Container qfbench-migrate-1 Starting 
+ Container qfbench-migrate-1 Started 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-migrate-1 Waiting 
+ Container qfbench-redis-1 Waiting 
+ Container qfbench-redis-1 Healthy 
+ Container qfbench-migrate-1 Exited 
+ Container qfbench-migrate-1 Exited 
+  database before: {'jobs': {'live_rows': 998201, 'dead_rows': 0, 'total_bytes': 309141504, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 999984, 'dead_rows': 0, 'total_bytes': 216391680, 'table_bytes': 101138432}} (534 MB)
+  plain run 1: {'kind': 'plain', 'backup_file_mb': 69.703292, 'backup_seconds': 14, 'restore_seconds': 45, 'verify_total_seconds': 54, 'verify_ok': True}
+  plain run 2: {'kind': 'plain', 'backup_file_mb': 69.703292, 'backup_seconds': 14, 'restore_seconds': 35, 'verify_total_seconds': 37, 'verify_ok': True}
+  encrypted run 1: {'kind': 'encrypted', 'backup_file_mb': 69.703312, 'backup_seconds': 16, 'restore_seconds': 35, 'verify_total_seconds': 39, 'verify_ok': True}
+  encrypted run 2: {'kind': 'encrypted', 'backup_file_mb': 69.703312, 'backup_seconds': 16, 'restore_seconds': 33, 'verify_total_seconds': 38, 'verify_ok': True}
+saved docs\benchmark-results\20261013T165155Z_backup-drill_1m.json
+### backup matrix finished

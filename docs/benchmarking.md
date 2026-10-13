@@ -227,6 +227,10 @@ Tables after preload: {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_byt
 
 Tables after preload: {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 309411840, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 215883776, 'table_bytes': 101138432}} (took 89 s)
 
+**Preloaded history**
+
+Tables after preload: {'jobs': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 309141504, 'table_bytes': 189669376}, 'job_attempts': {'live_rows': 1000000, 'dead_rows': 0, 'total_bytes': 216391680, 'table_bytes': 101138432}} (took 150 s)
+
 **Query timings with 1,000,000 finished jobs and 20,000 queued: before and after the two partial indexes**
 
 Median of 3 runs of EXPLAIN (ANALYZE), milliseconds.
@@ -291,6 +295,21 @@ Run `retention-full-1m`: 1000000 jobs (2000000 rows including their attempts) in
 
 **Does purging slow down live work?** The test ran the purge *flat out* (far harder than the shipped service, which does one bounded cycle a minute) while 4 workers processed `echo` jobs. In the interleaved comparison (rows `retention-*` in the drain table in 3.2), the medians were 74.5 jobs/s without the purge against 71.0 with it in round 1, and 69.5 against 66.5 in round 2: **about 4-5% lower with the purge running, in both rounds, but smaller than the run-to-run spread** (single runs ranged from 52 to 99 jobs/s). While competing with the workers the purge deleted about 3,700 jobs a second instead of about 8,300. Caveat: in round 2 the history had already shrunk to 385,000-525,000 rows (the purge in round 1 had consumed it), so round 2 is weaker evidence than round 1.
 
+### 3.10 Backup and restore
+
+Database: 998201 jobs and 999984 attempts, 534 MB on disk.
+
+| Kind | Run | Backup file (MB) | Backup (s) | Restore into a scratch database (s) | Whole verify (s) | Verified OK |
+|---|---|---|---|---|---|---|
+| plain | 1 | 69.7 | 14 | 45 | 54 | yes |
+| plain | 2 | 69.7 | 14 | 35 | 37 | yes |
+| encrypted | 1 | 69.7 | 16 | 35 | 39 | yes |
+| encrypted | 2 | 69.7 | 16 | 33 | 38 | yes |
+
+**Reading it.** A database of about 534 MB (roughly 1,000,000 jobs and 1,000,000 attempts) is backed up in about **14 s** into a **70 MB** file (the dump format is compressed), or about 16 s when the file is also encrypted. Restoring it into a scratch database took **33 to 45 s**, and the whole verification (restore, the checks, and deleting the scratch database) 37 to 54 s. **All four runs passed every check.** For this data size, on this laptop, that is the database part of a recovery time: about a minute. A real recovery also has the human steps (stopping and restarting services, choosing the backup) which were **not timed**.
+
+**Not measured:** the effect of a running backup on live traffic (it reads one consistent snapshot and does not block writers, but it does use CPU and disk, so some slowdown is likely); larger databases; restoring onto a different machine or across a network; restoring into a different PostgreSQL major version (not supported by these scripts). The backup file here was written to a Docker volume on the same disk, so the speed of a remote backup location is also unknown.
+
 ## 4. What the measurements led to (and whether it worked)
 
 Each change below was made because a measurement showed a problem, and was re-measured afterwards.
@@ -341,6 +360,7 @@ From the repository root, with the database credentials exported (`set -a; . ./.
 |---|---|
 | `scripts/benchmark/run_core.sh` | API cost, worker drain capacity, idle latency (sections 3.1 to 3.3) |
 | `scripts/benchmark/run_extended.sh` | fairness, overload, steady state, soak, 1M-row history and query plans |
+| `scripts/benchmark/run_backup.sh` | the backup and restore timings (3.10) |
 | `scripts/benchmark/run_retention.sh` | the retention measurements (3.9 and section 4.6) |
 | `scripts/benchmark/run_fairness.sh` | the fair-claiming measurements (3.6 and section 4.5) |
 | `scripts/benchmark/run_after_changes.sh` and `..._part2.sh`, `..._part3.sh`, `..._part4.sh` | the re-measurements after the changes in section 4 (run in four parts because of the harness problems described above; the exact commands are in each file) |

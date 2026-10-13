@@ -136,5 +136,31 @@ services:
       retries: 3
       start_period: 30s
 
+  # Backup and restore tools (run on demand; the `tools` profile keeps them out of a normal
+  # `docker compose up`). Backups go to the `backups` volume: for real safety mount a path on
+  # ANOTHER machine or disk instead, because a backup beside the database dies with it.
+  #   docker compose --profile tools run --rm dbtools backup
+  #   docker compose --profile tools run --rm dbtools drill
+  dbtools:
+    image: postgres:16
+    profiles: ["tools"]
+    entrypoint: ["bash", "/scripts/dbtools.sh"]
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+    volumes:
+      - ./scripts/backup:/scripts:ro
+      - backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
+  backups:
   pgdata:

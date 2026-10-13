@@ -1188,6 +1188,42 @@ def scenario_purge(args: argparse.Namespace) -> None:
         )  # fmt: skip
 
 
+def scenario_backup_drill(args: argparse.Namespace) -> None:
+    """Time a real backup and a verified restore of the current database (plain and encrypted)."""
+    ensure_stack(0)
+    with connect() as conn:
+        tables = table_stats(conn)
+        size_row = conn.execute("SELECT pg_database_size(current_database())").fetchone()
+        database_bytes = int(size_row[0]) if size_row else 0
+        print(f"  database before: {tables} ({database_bytes / 1e6:.0f} MB)")
+        results = []
+        for label, passphrase in (("plain", ""), ("encrypted", "benchmark-only-passphrase")):
+            for run in range(args.repeat):
+                out = compose(
+                    "--profile", "tools", "run", "--rm", "-T", "dbtools", "drill",
+                    env={"BACKUP_PASSPHRASE": passphrase}, capture=True,
+                )  # fmt: skip
+                values = dict(
+                    line.split("=", 1) for line in out.splitlines() if re.match(r"^[a-z_]+=", line)
+                )
+                row = {
+                    "kind": label,
+                    "backup_file_mb": int(values["backup_bytes"]) / 1e6,
+                    "backup_seconds": int(values["backup_seconds"]),
+                    "restore_seconds": int(values["verify_restore_seconds"]),
+                    "verify_total_seconds": int(values["verify_total_seconds"]),
+                    "verify_ok": "VERIFY OK" in out,
+                }
+                results.append(row)
+                print(f"  {label} run {run + 1}: {row}")
+        save(
+            "backup-drill", args.label,
+            {"parameters": vars(args), "tables": tables, "database_bytes": database_bytes,
+             "results": results},
+            conn,
+        )  # fmt: skip
+
+
 def scenario_claimcost(args: argparse.Namespace) -> None:
     """How much does picking a client fairly cost, compared with plain oldest-first?"""
     from queueforge.worker.claims import _PICK_FAIR_CLIENT_SQL
@@ -1324,6 +1360,7 @@ def main() -> None:
     add("preload", scenario_preload, rows=1_000_000)
     add("plans", scenario_plans, queued=20_000, repeat=3)
     add("scrape", scenario_scrape, repeat=5, workers=0)
+    add("backup-drill", scenario_backup_drill, repeat=2)
     add("purge", scenario_purge, days=1, batch_size=1000, batches_per_cycle=50)
     cc = add("claimcost", scenario_claimcost, repeat=5, jobs_per_client=50)
     cc.add_argument("--client-counts", type=int, nargs="+", default=[1, 10, 100, 1000])
